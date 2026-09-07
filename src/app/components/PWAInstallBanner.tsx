@@ -152,7 +152,7 @@ export function PWAInstallBanner() {
             </button>
           </div>
           <p className="text-xs text-slate-400 mb-3">
-            Instale o Electrominho no seu dispositivo para acesso rápido e receber notificações.
+            Instale a Fresave ERP no seu dispositivo para acesso rápido e receber notificações.
           </p>
           <div className="flex gap-2">
             <button
