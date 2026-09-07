@@ -1,0 +1,41 @@
+{
+  "name": "Electrominho — Gestão de Frota",
+  "short_name": "ElectroFlota",
+  "description": "Sistema de Gestão de Frota da Electrominho",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#111827",
+  "theme_color": "#1e40af",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "https://media.licdn.com/dms/image/v2/D4D0BAQE5TclqZAO2YA/company-logo_200_200/company-logo_200_200/0/1687771286669?e=2147483647&v=beta&t=d-4KNKnwa9oNStJhSusNNJyfWPYCOWl1-Ufrllnj3x0",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://media.licdn.com/dms/image/v2/D4D0BAQE5TclqZAO2YA/company-logo_200_200/company-logo_200_200/0/1687771286669?e=2147483647&v=beta&t=d-4KNKnwa9oNStJhSusNNJyfWPYCOWl1-Ufrllnj3x0",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "description": "Ver estatísticas gerais",
+      "url": "/#dashboard",
+      "icons": [{ "src": "https://media.licdn.com/dms/image/v2/D4D0BAQE5TclqZAO2YA/company-logo_200_200/company-logo_200_200/0/1687771286669?e=2147483647&v=beta&t=d-4KNKnwa9oNStJhSusNNJyfWPYCOWl1-Ufrllnj3x0", "sizes": "96x96" }]
+    },
+    {
+      "name": "Tickets",
+      "short_name": "Tickets",
+      "description": "Ver tickets de suporte",
+      "url": "/#tickets",
+      "icons": [{ "src": "https://media.licdn.com/dms/image/v2/D4D0BAQE5TclqZAO2YA/company-logo_200_200/company-logo_200_200/0/1687771286669?e=2147483647&v=beta&t=d-4KNKnwa9oNStJhSusNNJyfWPYCOWl1-Ufrllnj3x0", "sizes": "96x96" }]
+    }
+  ]
+}
