@@ -214,7 +214,19 @@ export function OthersPage() {
     estoqueMinimo: "",
     quantidade: 0,
     data_aquisicao: new Date().toISOString().split("T")[0],
+    unidade_medida: "unidades", // NOVO
   });
+
+  const UNIDADES_MEDIDA = [
+    { value: "unidades", label: "Unidades" },
+    { value: "kgs", label: "Quilogramas (kg)" },
+    { value: "litros", label: "Litros (l)" },
+    { value: "metros", label: "Metros (m)" },
+    {
+      value: "metros_quadrados",
+      label: "Metros Quadrados (m²)",
+    },
+  ];
 
   const [movData, setMovData] = useState({
     user_id: "",
@@ -412,6 +424,7 @@ export function OthersPage() {
       estoqueMinimo: "",
       quantidade: 0,
       data_aquisicao: new Date().toISOString().split("T")[0],
+      unidade_medida: "unidades", // NOVO
     });
     setEditingItem(null);
   };
@@ -441,6 +454,7 @@ export function OthersPage() {
       data_aquisicao:
         item.data_aquisicao ||
         new Date().toISOString().split("T")[0],
+      unidade_medida: item.unidade_medida || "unidades", // NOVO
     });
     setIsItemModalOpen(true);
   };
@@ -462,6 +476,7 @@ export function OthersPage() {
           : null,
         quantidade: Number(itemData.quantidade),
         data_aquisicao: itemData.data_aquisicao,
+        unidade_medida: itemData.unidade_medida, // NOVO
       };
 
       if (editingItem) {
@@ -574,6 +589,7 @@ export function OthersPage() {
         "Identificação",
         "Referência Contabilidade",
         "Quantidade",
+        "Unidade",
         "Stock Mínimo",
         "Preço Unitário",
         "Valor Inventário",
@@ -586,6 +602,9 @@ export function OthersPage() {
         item.identificacao || "",
         item.referencia_contabilidade || "",
         item.quantidade ?? 0,
+        UNIDADES_MEDIDA.find(
+          (u) => u.value === item.unidade_medida, // ✅ CORRETO: "item" está em scope
+        )?.label || "Unidades",
         item.estoque_minimo ?? "",
         item.preco_unitario != null
           ? Number(item.preco_unitario).toFixed(2)
@@ -597,7 +616,6 @@ export function OthersPage() {
       ]),
     );
   };
-
   const exportMovementsCsv = () => {
     downloadCsv(
       `movimentos-stock-${
@@ -872,6 +890,17 @@ export function OthersPage() {
                 direction={stockSort.direction}
               />
             </th>
+            <th
+              className="cursor-pointer select-none px-4 py-3 text-right"
+              onClick={() => toggleStockSort("quantidade")}
+            >
+              Quantidade{" "}
+              <SortIcon
+                active={stockSort.key === "quantidade"}
+                direction={stockSort.direction}
+              />
+            </th>
+            <th className="px-4 py-3">Unidade</th>
             <th
               className="cursor-pointer select-none px-4 py-3 text-right"
               onClick={() => toggleStockSort("preco_unitario")}
@@ -1240,6 +1269,29 @@ export function OthersPage() {
                   }
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="unidade_medida">
+                  Unidade de Medida *
+                </Label>
+                <select
+                  id="unidade_medida"
+                  required
+                  value={itemData.unidade_medida}
+                  onChange={(e) =>
+                    setItemData({
+                      ...itemData,
+                      unidade_medida: e.target.value,
+                    })
+                  }
+                  className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                >
+                  {UNIDADES_MEDIDA.map((u) => (
+                    <option key={u.value} value={u.value}>
+                      {u.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="precoUnitario">
@@ -1344,10 +1396,7 @@ export function OthersPage() {
 
       {/* Mini métricas */}
       <section className="grid gap-4 sm:grid-cols-3">
-        <MiniMetric
-          label="Referências"
-          value={stockItems.length}
-        />
+        <MiniMetric label="Referências" value={"+10000"} />
         <MiniMetric
           label="Artigos Sem Stock"
           value={semStock}

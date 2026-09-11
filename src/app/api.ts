@@ -4,6 +4,9 @@ import {
   projectId,
   publicAnonKey,
 } from "../../utils/supabase/info";
+const WINTOUCH_BASE_URL = "https://o-teu-servidor-wintouch.com/api/v1";
+const WINTOUCH_ENTERPRISE = "O-TEU-ID-DE-EMPRESA";
+
 
 const supabaseUrl = `https://${projectId}.supabase.co`;
 
@@ -828,6 +831,7 @@ export const stockAPI = {
           estoque_minimo: item.estoque_minimo || null,
           quantidade: item.quantidade,
           data_aquisicao: item.data_aquisicao,
+          unidade_medida: item.unidade_medida || "un",
         },
       ])
       .select();
@@ -1379,4 +1383,34 @@ export const trackingAPI = {
       ),
     };
   },
+};
+
+// Adiciona este objeto exportado
+export const wintouchAPI = {
+  // Ler stock real
+  getStock: async (token: string) => {
+    const response = await fetch(`${WINTOUCH_BASE_URL}/inventories`, {
+      method: "GET",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "x-current-enterprise": WINTOUCH_ENTERPRISE,
+        "Accept": "application/json"
+      }
+    });
+    return response.json();
+  },
+
+//------------WINTOUCH API-----------------------------------------------------------
+  saveWork: async (token: string, data: any) => {
+    const response = await fetch(`${WINTOUCH_BASE_URL}/data_import/entities`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "x-current-enterprise": WINTOUCH_ENTERPRISE,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify([data])
+    });
+    return response.json();
+  }
 };
