@@ -391,26 +391,34 @@ CREATE TABLE IF NOT EXISTS public.cintas_estropos (
 -- 22. STOCK_ITEMS
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.stock_items (
-  id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  nome           TEXT NOT NULL,
-  identificacao  TEXT,
-  quantidade     NUMERIC DEFAULT 0,
-  data_aquisicao DATE,
-  created_at     TIMESTAMPTZ DEFAULT NOW()
+  id                       UUID    PRIMARY KEY DEFAULT uuid_generate_v4(),
+  nome                     TEXT    NOT NULL,
+  identificacao            TEXT,
+  referencia_contabilidade TEXT,
+  descricao                TEXT,
+  tag                      TEXT,
+  unidade_medida           TEXT    DEFAULT 'unidades',
+  quantidade               NUMERIC DEFAULT 0,
+  estoque_minimo           NUMERIC,
+  preco_unitario           NUMERIC,
+  data_aquisicao           DATE,
+  created_at               TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ============================================================
 -- 23. STOCK_MOVEMENTS
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.stock_movements (
-  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  item_id     UUID REFERENCES public.stock_items(id) ON DELETE SET NULL,
-  user_id     UUID REFERENCES public.users(id) ON DELETE SET NULL,
-  veiculo_id  TEXT,
-  tipo        TEXT NOT NULL,
-  quantidade  NUMERIC NOT NULL,
-  data        DATE DEFAULT CURRENT_DATE,
-  created_at  TIMESTAMPTZ DEFAULT NOW()
+  id           UUID    PRIMARY KEY DEFAULT uuid_generate_v4(),
+  item_id      UUID    REFERENCES public.stock_items(id) ON DELETE SET NULL,
+  user_id      UUID    REFERENCES public.users(id)       ON DELETE SET NULL,
+  veiculo_id   TEXT,
+  job_id       TEXT,
+  is_manutencao BOOLEAN DEFAULT false,
+  tipo         TEXT    NOT NULL,
+  quantidade   NUMERIC NOT NULL,
+  data         DATE    DEFAULT CURRENT_DATE,
+  created_at   TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ============================================================

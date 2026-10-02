@@ -102,31 +102,18 @@ export function Layout({
     },
     {
       id: "Viaturas",
-      label: "Ligeiros",
+      label: "Viaturas",
       icon: Car,
       section: "Frota",
       roles: ["administrador", "escritorio"],
       items: [{ id: "vehicles", label: "Viaturas", icon: Car }],
     },
-    {
-      id: "equipamentos",
-      label: "Equipamentos",
-      icon: Package,
-      section: "Frota",
-      roles: ["administrador", "escritorio", "projeto"],
-      items: [
-        {
-          id: "equipment",
-          label: "Equipamentos",
-          icon: Package,
-        },
-      ],
-    },
+   
     {
       id: "stock",
       label: "Stock e Movimentos",
       icon: Package,
-      section: "Frota",
+      section: "Operações",
       roles: ["administrador", "escritorio", "projeto"],
       items: [
         {

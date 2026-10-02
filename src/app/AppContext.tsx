@@ -172,84 +172,150 @@ export function AppProvider({
   >({});
   const [loading, setLoading] = useState(true);
 
+  // ==================== STOCK DATA ====================
   const loadStockData = useCallback(async () => {
     try {
       const [itemsRes, movsRes] = await Promise.all([
         stockAPI.getItems().catch(() => ({ data: [] })),
         stockAPI.getMovements().catch(() => ({ data: [] })),
       ]);
-      setStockItems(itemsRes.data || []);
-      setStockMovements(
-        (movsRes.data || []).map((m: any) => ({
-          ...m,
-          item_nome: m.stock_items?.nome,
-          user_nome: m.users?.nome,
-        })),
+
+      const items = (itemsRes.data || itemsRes || []).map(
+        (item: any) => ({
+          ...item,
+          quantidade: item.quantidade ?? 0,
+        }),
       );
+
+      const movements = (movsRes.data || movsRes || []).map(
+        (m: any) => ({
+          ...m,
+          item_nome: m.stock_items?.nome || m.item_nome,
+          user_nome: m.users?.nome || m.user_nome,
+        }),
+      );
+
+      setStockItems(items);
+      setStockMovements(movements);
     } catch (error) {
-      console.error("Erro a carregar stock:", error);
+      console.error("Erro ao carregar stock:", error);
+      setStockItems([]);
+      setStockMovements([]);
     }
   }, []);
 
   const addStockItem = async (item: any) => {
-    await stockAPI.addItem(item);
-    await loadStockData();
-    addNotification({
-      tipo: "sucesso",
-      titulo: "Stock",
-      mensagem: "Artigo registado com sucesso.",
-    });
+    try {
+      await stockAPI.addItem(item);
+      await loadStockData();
+      addNotification({
+        tipo: "sucesso",
+        titulo: "Stock",
+        mensagem: "Artigo registado com sucesso.",
+      });
+    } catch (error) {
+      console.error("Erro ao adicionar artigo:", error);
+      addNotification({
+        tipo: "erro",
+        titulo: "Erro",
+        mensagem: "Erro ao registar artigo.",
+      });
+      throw error;
+    }
   };
 
   const updateStockItem = async (id: string, item: any) => {
-    await stockAPI.updateItem(id, item);
-    await loadStockData();
-    addNotification({
-      tipo: "sucesso",
-      titulo: "Stock",
-      mensagem: "Artigo atualizado.",
-    });
+    try {
+      await stockAPI.updateItem(id, item);
+      await loadStockData();
+      addNotification({
+        tipo: "sucesso",
+        titulo: "Stock",
+        mensagem: "Artigo atualizado com sucesso.",
+      });
+    } catch (error) {
+      console.error("Erro ao atualizar artigo:", error);
+      addNotification({
+        tipo: "erro",
+        titulo: "Erro",
+        mensagem: "Erro ao atualizar artigo.",
+      });
+      throw error;
+    }
   };
 
   const deleteStockItem = async (id: string) => {
-    await stockAPI.deleteItem(id);
-    await loadStockData();
-    addNotification({
-      tipo: "sucesso",
-      titulo: "Stock",
-      mensagem: "Artigo removido.",
-    });
+    try {
+      await stockAPI.deleteItem(id);
+      await loadStockData();
+      addNotification({
+        tipo: "sucesso",
+        titulo: "Stock",
+        mensagem: "Artigo removido com sucesso.",
+      });
+    } catch (error) {
+      console.error("Erro ao remover artigo:", error);
+      addNotification({
+        tipo: "erro",
+        titulo: "Erro",
+        mensagem: "Erro ao remover artigo.",
+      });
+      throw error;
+    }
   };
 
   const addStockMovement = async (mov: any) => {
-    await stockAPI.addMovement(mov);
-    const item = stockItems.find((i) => i.id === mov.item_id);
-    if (item) {
-      const novaQtd =
-        mov.tipo === "levantamento"
-          ? Number(item.quantidade) - Number(mov.quantidade)
-          : Number(item.quantidade) + Number(mov.quantidade);
-      await stockAPI.updateItem(mov.item_id, {
-        ...item,
-        quantidade: novaQtd,
+    try {
+      await stockAPI.addMovement(mov);
+      const item = stockItems.find((i) => i.id === mov.item_id);
+
+      if (item) {
+        const novaQtd =
+          mov.tipo === "levantamento"
+            ? Number(item.quantidade) - Number(mov.quantidade)
+            : Number(item.quantidade) + Number(mov.quantidade);
+
+        await stockAPI.updateItem(mov.item_id, {
+          ...item,
+          quantidade: Math.max(0, novaQtd),
+        });
+      }
+
+      await loadStockData();
+      addNotification({
+        tipo: "sucesso",
+        titulo: "Movimento",
+        mensagem: "Movimento registado com sucesso.",
       });
+    } catch (error) {
+      console.error("Erro ao registar movimento:", error);
+      addNotification({
+        tipo: "erro",
+        titulo: "Erro",
+        mensagem: "Erro ao registar movimento.",
+      });
+      throw error;
     }
-    await loadStockData();
-    addNotification({
-      tipo: "sucesso",
-      titulo: "Movimento Registado",
-      mensagem: "Registo efetuado com sucesso.",
-    });
   };
 
   const deleteStockMovement = async (id: string) => {
-    await stockAPI.deleteMovement(id);
-    await loadStockData();
-    addNotification({
-      tipo: "sucesso",
-      titulo: "Movimento",
-      mensagem: "Registo apagado.",
-    });
+    try {
+      await stockAPI.deleteMovement(id);
+      await loadStockData();
+      addNotification({
+        tipo: "sucesso",
+        titulo: "Movimento",
+        mensagem: "Registo removido com sucesso.",
+      });
+    } catch (error) {
+      console.error("Erro ao remover movimento:", error);
+      addNotification({
+        tipo: "erro",
+        titulo: "Erro",
+        mensagem: "Erro ao remover movimento.",
+      });
+      throw error;
+    }
   };
 
   // ==================== AUTH ====================
@@ -365,6 +431,7 @@ export function AppProvider({
       setEquipment(equipmentWithStatus);
       setCalendarEvents(calendarEventsData);
 
+      // ✅ Carrega stock data no refresh
       await loadStockData();
     } catch (error) {
       console.error("Error refreshing data:", error);

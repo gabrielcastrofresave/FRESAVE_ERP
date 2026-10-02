@@ -4,14 +4,12 @@ import { useApp } from "../AppContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { jobsAPI } from "../api";
-
 import { Label } from "../components/ui/label";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogDescription,
 } from "../components/ui/dialog";
 import { Badge } from "../components/ui/badge";
@@ -27,209 +25,206 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
-  Maximize2,
   Filter,
   X,
+  LayoutList,
+  History,
+  TrendingDown,
+  Package,
+  Euro,
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight,
+  RefreshCw,
 } from "lucide-react";
 
-const PREVIEW_LIMIT = 5;
+// ==================== CONSTANTES ====================
+const PAGE_SIZE = 20;
 
-// ==================== TIPOS ====================
-type SortDirection = "asc" | "desc";
+type SortDir = "asc" | "desc";
 
 interface StockFilters {
-  tag: string;
-  artigo: string;
+  search: string;
   identificacao: string;
   referenciaContabilidade: string;
   status: "todos" | "esgotado" | "abaixo_minimo";
 }
 
-const EMPTY_STOCK_FILTERS: StockFilters = {
-  tag: "",
-  artigo: "",
+const EMPTY_FILTERS: StockFilters = {
+  search: "",
   identificacao: "",
   referenciaContabilidade: "",
   status: "todos",
 };
 
-// ==================== COMPONENTES AUXILIARES ====================
-function SortIcon({
-  active,
-  direction,
-}: {
-  active: boolean;
-  direction: SortDirection;
-}) {
-  if (!active)
-    return (
-      <ArrowUpDown className="ml-1 inline h-3 w-3 text-zinc-300" />
-    );
-  return direction === "asc" ? (
-    <ArrowUp className="ml-1 inline h-3 w-3" />
-  ) : (
-    <ArrowDown className="ml-1 inline h-3 w-3" />
-  );
+const UNIDADES = [
+  { value: "unidades", label: "un." },
+  { value: "kgs", label: "kg" },
+  { value: "litros", label: "L" },
+  { value: "metros", label: "m" },
+  { value: "metros_quadrados", label: "m²" },
+];
+
+// ==================== UTILITÁRIOS ====================
+function fmtDate(v: string | null | undefined) {
+  if (!v) return "—";
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("pt-PT");
 }
 
-function MiniMetric({
-  label,
-  value,
-  warning,
+function fmtEuro(v: any) {
+  if (v === null || v === undefined || v === "") return "—";
+  return new Intl.NumberFormat("pt-PT", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+  }).format(Number(v));
+}
+
+function fmtUnit(item: any) {
+  return UNIDADES.find((u) => u.value === item.unidade_medida)?.label ?? "un.";
+}
+
+function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
+  const esc = (v: string | number) => {
+    const s = String(v ?? "");
+    return s.includes(";") || s.includes('"') || s.includes("\n")
+      ? `"${s.replace(/"/g, '""')}"`
+      : s;
+  };
+  const blob = new Blob(
+    ["﻿" + [headers, ...rows].map((r) => r.map(esc).join(";")).join("\r\n")],
+    { type: "text/csv;charset=utf-8;" }
+  );
+  const a = Object.assign(document.createElement("a"), {
+    href: URL.createObjectURL(blob),
+    download: filename,
+  });
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// ==================== SUBCOMPONENTES ====================
+function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
+  if (!active) return <ArrowUpDown className="ml-1 inline h-3 w-3 opacity-40" />;
+  return dir === "asc"
+    ? <ArrowUp className="ml-1 inline h-3 w-3" />
+    : <ArrowDown className="ml-1 inline h-3 w-3" />;
+}
+
+function KpiCard({
+  label, value, sub, icon: Icon, accent,
 }: {
-  label: string;
-  value: number;
-  warning?: boolean;
+  label: string; value: string; sub?: string;
+  icon: React.ElementType; accent?: "red" | "amber" | "green" | "blue";
 }) {
+  const colours = {
+    red:   "text-red-600   bg-red-50   dark:bg-red-950/30   dark:text-red-400",
+    amber: "text-amber-600 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400",
+    green: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400",
+    blue:  "text-blue-600  bg-blue-50  dark:bg-blue-950/30  dark:text-blue-400",
+  };
+  const cls = colours[accent ?? "blue"];
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white px-5 py-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-        {label}
-      </p>
-      <p
-        className={`mt-2 text-2xl font-semibold tracking-tight ${
-          warning && value > 0
-            ? "text-red-600"
-            : "text-zinc-900 dark:text-zinc-50"
-        }`}
-      >
-        {value}
-      </p>
+    <div className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${cls}`}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-xs font-medium text-zinc-500 dark:text-zinc-400">{label}</p>
+        <p className="mt-0.5 text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">{value}</p>
+        {sub && <p className="mt-0.5 text-[11px] text-zinc-400">{sub}</p>}
+      </div>
     </div>
   );
 }
 
-// ==================== FUNÇÕES UTILITÁRIAS ====================
-function downloadCsv(
-  filename: string,
-  headers: string[],
-  rows: (string | number)[][],
-) {
-  const escapeCell = (value: string | number) => {
-    const str = String(value ?? "");
-    if (
-      str.includes(";") ||
-      str.includes('"') ||
-      str.includes("\n")
-    ) {
-      return `"${str.replace(/"/g, '""')}"`;
-    }
-    return str;
-  };
-
-  const lines = [
-    headers.map(escapeCell).join(";"),
-    ...rows.map((row) => row.map(escapeCell).join(";")),
-  ];
-
-  const csvContent = "\ufeff" + lines.join("\r\n");
-  const blob = new Blob([csvContent], {
-    type: "text/csv;charset=utf-8;",
-  });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function formatDatePt(value: string | null | undefined) {
-  if (!value) return "-";
-  return new Date(value).toLocaleDateString("pt-PT");
-}
-
-function formatEuro(value: any) {
-  if (value === null || value === undefined || value === "")
-    return "-";
-  return `${Number(value).toFixed(2)} €`;
+function Pagination({
+  page, total, pageSize, onChange,
+}: { page: number; total: number; pageSize: number; onChange: (p: number) => void }) {
+  const pages = Math.ceil(total / pageSize);
+  if (pages <= 1) return null;
+  return (
+    <div className="flex items-center justify-between border-t border-zinc-100 px-5 py-3 dark:border-zinc-800">
+      <span className="text-xs text-zinc-400">
+        {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} de {total}
+      </span>
+      <div className="flex items-center gap-1">
+        <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page <= 1} onClick={() => onChange(page - 1)}>
+          <ChevronLeft className="h-4 w-4" />
+        </Button>
+        {Array.from({ length: Math.min(pages, 5) }, (_, i) => {
+          let p = i + 1;
+          if (pages > 5) {
+            if (page <= 3) p = i + 1;
+            else if (page >= pages - 2) p = pages - 4 + i;
+            else p = page - 2 + i;
+          }
+          return (
+            <button
+              key={p}
+              onClick={() => onChange(p)}
+              className={`h-7 w-7 rounded text-xs font-medium transition-colors ${
+                p === page
+                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                  : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              }`}
+            >
+              {p}
+            </button>
+          );
+        })}
+        <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page >= pages} onClick={() => onChange(page + 1)}>
+          <ChevronRight className="h-4 w-4" />
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 // ==================== COMPONENTE PRINCIPAL ====================
 export function OthersPage() {
   const {
-    users,
-    stockItems,
-    stockMovements,
-    addStockItem,
-    updateStockItem,
-    deleteStockItem,
-    addStockMovement,
-    deleteStockMovement,
-    currentUser,
+    users, stockItems, stockMovements,
+    addStockItem, updateStockItem, deleteStockItem,
+    addStockMovement, deleteStockMovement,
+    loadStockData, currentUser,
   } = useApp();
 
-  // ==================== ESTADO ====================
+  const [tab, setTab] = useState<"stock" | "movimentos">("stock");
   const [jobs, setJobs] = useState<any[]>([]);
-  const [isItemModalOpen, setIsItemModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<any | null>(
-    null,
-  );
-  const [movementItem, setMovementItem] = useState<any | null>(
-    null,
-  );
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [stockExpanded, setStockExpanded] = useState(false);
-  const [movementsExpanded, setMovementsExpanded] =
-    useState(false);
+  // modais
+  const [isItemModal, setIsItemModal] = useState(false);
+  const [editingItem, setEditingItem] = useState<any | null>(null);
+  const [movementItem, setMovementItem] = useState<any | null>(null);
 
-  const [showStockFilters, setShowStockFilters] =
-    useState(false);
-  const [showMovFilters, setShowMovFilters] = useState(false);
+  // filtros stock
+  const [filters, setFilters] = useState<StockFilters>({ ...EMPTY_FILTERS });
+  const [showFilters, setShowFilters] = useState(false);
+  const [stockSort, setStockSort] = useState<{ key: string; dir: SortDir }>({ key: "nome", dir: "asc" });
+  const [stockPage, setStockPage] = useState(1);
 
+  // filtros movimentos
   const [searchMov, setSearchMov] = useState("");
-  const [tipoFilter, setTipoFilter] = useState<
-    "todos" | "levantamento" | "devolucao"
-  >("todos");
+  const [tipoMov, setTipoMov] = useState<"todos" | "levantamento" | "devolucao">("todos");
+  const [movSort, setMovSort] = useState<{ key: string; dir: SortDir }>({ key: "data", dir: "desc" });
+  const [movPage, setMovPage] = useState(1);
 
-  const [stockFilters, setStockFilters] =
-    useState<StockFilters>({
-      ...EMPTY_STOCK_FILTERS,
-    });
-
-  const [stockSort, setStockSort] = useState<{
-    key: string;
-    direction: SortDirection;
-  }>({
-    key: "nome",
-    direction: "asc",
-  });
-
-  const [movSort, setMovSort] = useState<{
-    key: string;
-    direction: SortDirection;
-  }>({
-    key: "data",
-    direction: "desc",
-  });
-
+  // form artigo
   const [itemData, setItemData] = useState({
-    nome: "",
-    identificacao: "",
-    referenciaContabilidade: "",
-    descricao: "",
-    precoUnitario: "",
-    estoqueMinimo: "",
-    quantidade: 0,
-    data_aquisicao: new Date().toISOString().split("T")[0],
-    unidade_medida: "unidades", // NOVO
+    nome: "", identificacao: "", referenciaContabilidade: "",
+    descricao: "", precoUnitario: "", estoqueMinimo: "",
+    quantidade: 0, data_aquisicao: new Date().toISOString().split("T")[0],
+    unidade_medida: "unidades",
   });
 
-  const UNIDADES_MEDIDA = [
-    { value: "unidades", label: "Unidades" },
-    { value: "kgs", label: "Quilogramas (kg)" },
-    { value: "litros", label: "Litros (l)" },
-    { value: "metros", label: "Metros (m)" },
-    {
-      value: "metros_quadrados",
-      label: "Metros Quadrados (m²)",
-    },
-  ];
-
+  // form movimento
   const [movData, setMovData] = useState({
-    user_id: "",
+    user_id: currentUser?.id ?? "",
     quantidade: 1,
     tipo: "levantamento" as "levantamento" | "devolucao",
     data: new Date().toISOString().split("T")[0],
@@ -239,308 +234,182 @@ export function OthersPage() {
 
   // ==================== EFEITOS ====================
   useEffect(() => {
-    const loadJobs = async () => {
-      try {
-        const data = await jobsAPI.getAll();
-        setJobs(data || []);
-      } catch (error) {
-        console.error("Erro ao carregar projetos:", error);
-      }
-    };
-    loadJobs();
+    jobsAPI.getAll().then(setJobs).catch(() => {});
   }, []);
 
+  // reset paginação ao filtrar
+  useEffect(() => { setStockPage(1); }, [filters, stockSort]);
+  useEffect(() => { setMovPage(1); }, [searchMov, tipoMov, movSort]);
+
   // ==================== PERMISSÕES ====================
-  const canDelete =
+  const isAdmin =
     currentUser?.role === "administrador" ||
     currentUser?.role === "escritorio" ||
     currentUser?.role === "projeto";
 
-  // ==================== FILTROS ====================
-  const activeStockFiltersCount = [
-    stockFilters.tag,
-    stockFilters.artigo,
-    stockFilters.identificacao,
-    stockFilters.referenciaContabilidade,
-    stockFilters.status !== "todos" ? stockFilters.status : "",
+  // ==================== FILTROS STOCK ====================
+  const activeCount = [
+    filters.search, filters.identificacao,
+    filters.referenciaContabilidade,
+    filters.status !== "todos" ? "x" : "",
   ].filter(Boolean).length;
 
-  const activeMovFiltersCount = tipoFilter !== "todos" ? 1 : 0;
-
-  const updateStockFilter = (
-    key: keyof StockFilters,
-    value: string,
-  ) =>
-    setStockFilters((current) => ({
-      ...current,
-      [key]: value,
-    }));
-
-  const clearStockFilters = () =>
-    setStockFilters({ ...EMPTY_STOCK_FILTERS });
-
-  // ==================== FILTRAGEM + ORDENAÇÃO: STOCK ====================
   const filteredStock = useMemo(() => {
-    let result = stockItems.filter((i: any) => {
-      const matchesTag =
-        !stockFilters.tag ||
-        i.tag
-          ?.toLowerCase()
-          .includes(stockFilters.tag.toLowerCase());
-      const matchesArtigo =
-        !stockFilters.artigo ||
-        i.nome
-          ?.toLowerCase()
-          .includes(stockFilters.artigo.toLowerCase());
-      const matchesIdentificacao =
-        !stockFilters.identificacao ||
-        i.identificacao
-          ?.toLowerCase()
-          .includes(stockFilters.identificacao.toLowerCase());
-      const matchesReferencia =
-        !stockFilters.referenciaContabilidade ||
+    const q = filters.search.toLowerCase();
+    let r = stockItems.filter((i: any) => {
+      const matchSearch =
+        !q ||
+        i.nome?.toLowerCase().includes(q) ||
+        i.identificacao?.toLowerCase().includes(q) ||
+        i.tag?.toLowerCase().includes(q);
+      const matchId =
+        !filters.identificacao ||
+        i.identificacao?.toLowerCase().includes(filters.identificacao.toLowerCase());
+      const matchRef =
+        !filters.referenciaContabilidade ||
         i.referencia_contabilidade
           ?.toLowerCase()
-          .includes(
-            stockFilters.referenciaContabilidade.toLowerCase(),
-          );
-      return (
-        matchesTag &&
-        matchesArtigo &&
-        matchesIdentificacao &&
-        matchesReferencia
-      );
+          .includes(filters.referenciaContabilidade.toLowerCase());
+      return matchSearch && matchId && matchRef;
     });
 
-    if (stockFilters.status === "esgotado") {
-      result = result.filter((i) => Number(i.quantidade) <= 0);
-    } else if (stockFilters.status === "abaixo_minimo") {
-      result = result.filter(
+    if (filters.status === "esgotado") {
+      r = r.filter((i) => Number(i.quantidade) <= 0);
+    } else if (filters.status === "abaixo_minimo") {
+      r = r.filter(
         (i) =>
           i.estoque_minimo != null &&
-          Number(i.quantidade) <= Number(i.estoque_minimo) &&
-          Number(i.quantidade) > 0,
+          Number(i.quantidade) < Number(i.estoque_minimo) &&
+          Number(i.quantidade) > 0
       );
     }
 
-    const { key, direction } = stockSort;
-    result = [...result].sort((a: any, b: any) => {
-      const aVal = a[key];
-      const bVal = b[key];
-      if (aVal == null && bVal == null) return 0;
-      if (aVal == null) return 1;
-      if (bVal == null) return -1;
-      if (typeof aVal === "string") {
-        return direction === "asc"
-          ? aVal.localeCompare(bVal)
-          : bVal.localeCompare(aVal);
-      }
-      return direction === "asc" ? aVal - bVal : bVal - aVal;
+    const { key, dir } = stockSort;
+    return [...r].sort((a: any, b: any) => {
+      const av = a[key], bv = b[key];
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === "string") return dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      return dir === "asc" ? av - bv : bv - av;
     });
+  }, [stockItems, filters, stockSort]);
 
-    return result;
-  }, [stockItems, stockFilters, stockSort]);
+  const pagedStock = filteredStock.slice((stockPage - 1) * PAGE_SIZE, stockPage * PAGE_SIZE);
 
-  // ==================== FILTRAGEM + ORDENAÇÃO: MOVIMENTOS ====================
+  // ==================== FILTROS MOVIMENTOS ====================
   const filteredMovements = useMemo(() => {
-    let result = stockMovements.filter((m) => {
-      const matchesTipo =
-        tipoFilter === "todos" || m.tipo === tipoFilter;
-      const q = searchMov.toLowerCase();
-      const matchesSearch =
-        !q ||
-        m.item_nome?.toLowerCase().includes(q) ||
-        m.user_nome?.toLowerCase().includes(q);
-      return matchesTipo && matchesSearch;
+    const q = searchMov.toLowerCase();
+    let r = stockMovements.filter((m: any) => {
+      const matchTipo = tipoMov === "todos" || m.tipo === tipoMov;
+      const matchQ = !q || m.item_nome?.toLowerCase().includes(q) || m.user_nome?.toLowerCase().includes(q);
+      return matchTipo && matchQ;
     });
-
-    const { key, direction } = movSort;
-    result = [...result].sort((a: any, b: any) => {
-      const aVal = a[key];
-      const bVal = b[key];
-      if (aVal == null && bVal == null) return 0;
-      if (aVal == null) return 1;
-      if (bVal == null) return -1;
-      if (typeof aVal === "string") {
-        return direction === "asc"
-          ? aVal.localeCompare(bVal)
-          : bVal.localeCompare(aVal);
-      }
-      return direction === "asc" ? aVal - bVal : bVal - aVal;
+    const { key, dir } = movSort;
+    return [...r].sort((a: any, b: any) => {
+      const av = a[key], bv = b[key];
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === "string") return dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
+      return dir === "asc" ? av - bv : bv - av;
     });
+  }, [stockMovements, searchMov, tipoMov, movSort]);
 
-    return result;
-  }, [stockMovements, searchMov, tipoFilter, movSort]);
-
-  const visibleStock = stockExpanded
-    ? filteredStock
-    : filteredStock.slice(0, PREVIEW_LIMIT);
-  const visibleMovements = movementsExpanded
-    ? filteredMovements
-    : filteredMovements.slice(0, PREVIEW_LIMIT);
-
-  // ==================== ORDENAÇÃO ====================
-  const toggleStockSort = (key: string) => {
-    setStockSort((current) =>
-      current.key === key
-        ? {
-            key,
-            direction:
-              current.direction === "asc" ? "desc" : "asc",
-          }
-        : { key, direction: "asc" },
-    );
-  };
-
-  const toggleMovSort = (key: string) => {
-    setMovSort((current) =>
-      current.key === key
-        ? {
-            key,
-            direction:
-              current.direction === "asc" ? "desc" : "asc",
-          }
-        : { key, direction: "asc" },
-    );
-  };
+  const pagedMovements = filteredMovements.slice((movPage - 1) * PAGE_SIZE, movPage * PAGE_SIZE);
 
   // ==================== MÉTRICAS ====================
-  const totalUnidades = stockItems.reduce(
-    (sum, i) => sum + Number(i.quantidade),
-    0,
-  );
-  const semStock = stockItems.filter(
-    (i) => Number(i.quantidade) <= 0,
+  const totalRef = stockItems.length;
+  const semStock = stockItems.filter((i: any) => Number(i.quantidade) <= 0).length;
+  const abaixoMin = stockItems.filter(
+    (i: any) => i.estoque_minimo != null && Number(i.quantidade) < Number(i.estoque_minimo) && Number(i.quantidade) > 0
   ).length;
+  const valorTotal = stockItems.reduce(
+    (s: number, i: any) => s + (i.preco_unitario != null ? Number(i.preco_unitario) * Number(i.quantidade) : 0),
+    0
+  );
+
+  // ==================== SORT ====================
+  const toggleStockSort = (key: string) =>
+    setStockSort((c) => c.key === key ? { key, dir: c.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
+
+  const toggleMovSort = (key: string) =>
+    setMovSort((c) => c.key === key ? { key, dir: c.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" });
 
   // ==================== CRUD ARTIGOS ====================
   const resetItemForm = () => {
     setItemData({
-      nome: "",
-      identificacao: "",
-      referenciaContabilidade: "",
-      descricao: "",
-      precoUnitario: "",
-      estoqueMinimo: "",
-      quantidade: 0,
-      data_aquisicao: new Date().toISOString().split("T")[0],
-      unidade_medida: "unidades", // NOVO
+      nome: "", identificacao: "", referenciaContabilidade: "",
+      descricao: "", precoUnitario: "", estoqueMinimo: "",
+      quantidade: 0, data_aquisicao: new Date().toISOString().split("T")[0],
+      unidade_medida: "unidades",
     });
     setEditingItem(null);
   };
 
-  const openCreateItem = () => {
-    resetItemForm();
-    setIsItemModalOpen(true);
-  };
-
-  const openEditItem = (item: any) => {
+  const openEdit = (item: any) => {
     setEditingItem(item);
     setItemData({
-      nome: item.nome || "",
-      identificacao: item.identificacao || "",
-      referenciaContabilidade:
-        item.referencia_contabilidade || "",
-      descricao: item.descricao || "",
-      precoUnitario:
-        item.preco_unitario != null
-          ? String(item.preco_unitario)
-          : "",
-      estoqueMinimo:
-        item.estoque_minimo != null
-          ? String(item.estoque_minimo)
-          : "",
-      quantidade: item.quantidade || 0,
-      data_aquisicao:
-        item.data_aquisicao ||
-        new Date().toISOString().split("T")[0],
-      unidade_medida: item.unidade_medida || "unidades", // NOVO
+      nome: item.nome ?? "",
+      identificacao: item.identificacao ?? "",
+      referenciaContabilidade: item.referencia_contabilidade ?? "",
+      descricao: item.descricao ?? "",
+      precoUnitario: item.preco_unitario != null ? String(item.preco_unitario) : "",
+      estoqueMinimo: item.estoque_minimo != null ? String(item.estoque_minimo) : "",
+      quantidade: item.quantidade ?? 0,
+      data_aquisicao: item.data_aquisicao ?? new Date().toISOString().split("T")[0],
+      unidade_medida: item.unidade_medida ?? "unidades",
     });
-    setIsItemModalOpen(true);
+    setIsItemModal(true);
   };
 
   const handleSubmitItem = async (e: React.FormEvent) => {
     e.preventDefault();
+    const payload = {
+      nome: itemData.nome,
+      identificacao: itemData.identificacao,
+      referencia_contabilidade: itemData.referenciaContabilidade || null,
+      descricao: itemData.descricao || null,
+      preco_unitario: itemData.precoUnitario ? Number(itemData.precoUnitario) : null,
+      estoque_minimo: itemData.estoqueMinimo ? Number(itemData.estoqueMinimo) : null,
+      quantidade: Number(itemData.quantidade),
+      data_aquisicao: itemData.data_aquisicao,
+      unidade_medida: itemData.unidade_medida,
+    };
     try {
-      const payload = {
-        nome: itemData.nome,
-        identificacao: itemData.identificacao,
-        referencia_contabilidade:
-          itemData.referenciaContabilidade,
-        descricao: itemData.descricao,
-        preco_unitario: itemData.precoUnitario
-          ? Number(itemData.precoUnitario)
-          : null,
-        estoque_minimo: itemData.estoqueMinimo
-          ? Number(itemData.estoqueMinimo)
-          : null,
-        quantidade: Number(itemData.quantidade),
-        data_aquisicao: itemData.data_aquisicao,
-        unidade_medida: itemData.unidade_medida, // NOVO
-      };
-
-      if (editingItem) {
-        await updateStockItem(editingItem.id, payload);
-      } else {
-        await addStockItem(payload);
-      }
-
+      if (editingItem) await updateStockItem(editingItem.id, payload);
+      else await addStockItem(payload);
       resetItemForm();
-      setIsItemModalOpen(false);
-    } catch (error) {
-      console.error("Erro ao guardar item:", error);
+      setIsItemModal(false);
+    } catch {
       alert("Erro ao guardar o artigo.");
     }
   };
 
-  const handleDeleteItem = async (id: string, nome: string) => {
-    if (
-      confirm(
-        `Remover "${nome}" do stock? O histórico associado também será apagado.`,
-      )
-    ) {
-      await deleteStockItem(id);
-    }
+  const handleDeleteItem = (id: string, nome: string) => {
+    if (confirm(`Remover "${nome}" do stock?`)) deleteStockItem(id);
   };
 
   // ==================== CRUD MOVIMENTOS ====================
-  const resetMovementForm = () => {
+  const resetMovForm = () =>
     setMovData({
-      user_id: "",
+      user_id: currentUser?.id ?? "",
       quantidade: 1,
       tipo: "levantamento",
       data: new Date().toISOString().split("T")[0],
       jobId: "",
       isManutencao: false,
     });
-  };
 
   const handleAddMovement = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!movementItem) return;
-
-    // Validação: projeto ou manutenção obrigatório
-    if (
-      movData.tipo === "levantamento" &&
-      !movData.isManutencao &&
-      !movData.jobId
-    ) {
+    if (movData.tipo === "levantamento" && !movData.isManutencao && !movData.jobId) {
       alert("Seleciona o projeto ou marca como manutenção.");
       return;
     }
-
-    // Validação: não permitir levantamento acima da quantidade
-    if (
-      movData.tipo === "levantamento" &&
-      Number(movData.quantidade) >
-        Number(movementItem.quantidade)
-    ) {
-      alert(
-        `Quantidade máxima para levantamento: ${movementItem.quantidade} unid.`,
-      );
+    if (movData.tipo === "levantamento" && Number(movData.quantidade) > Number(movementItem.quantidade)) {
+      alert(`Stock disponível: ${movementItem.quantidade} ${fmtUnit(movementItem)}`);
       return;
     }
-
     try {
       await addStockMovement({
         item_id: movementItem.id,
@@ -548,1195 +417,693 @@ export function OthersPage() {
         quantidade: Number(movData.quantidade),
         tipo: movData.tipo,
         data: movData.data,
-        job_id:
-          movData.tipo === "levantamento" &&
-          !movData.isManutencao
-            ? movData.jobId
-            : null,
-        is_manutencao:
-          movData.tipo === "levantamento"
-            ? movData.isManutencao
-            : false,
+        job_id: movData.tipo === "levantamento" && !movData.isManutencao ? movData.jobId : null,
+        is_manutencao: movData.tipo === "levantamento" ? movData.isManutencao : false,
       });
-
-      resetMovementForm();
+      resetMovForm();
       setMovementItem(null);
-    } catch (error) {
-      console.error("Erro ao submeter movimento:", error);
+    } catch {
       alert("Erro ao guardar o registo.");
     }
   };
 
-  const handleDeleteMovement = async (id: string) => {
-    if (confirm("Remover este registo de movimento?")) {
-      try {
-        await deleteStockMovement(id);
-      } catch (error) {
-        console.error("Erro ao remover movimento:", error);
-        alert("Erro ao remover o registo.");
-      }
-    }
+  // ==================== REFRESH ====================
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadStockData().catch(() => {});
+    setRefreshing(false);
   };
 
-  // ==================== EXPORTAÇÕES CSV ====================
-  const exportStockCsv = () => {
+  // ==================== EXPORTS ====================
+  const exportStock = () =>
     downloadCsv(
       `stock-${new Date().toISOString().split("T")[0]}.csv`,
-      [
-        "Tag",
-        "Artigo",
-        "Descrição",
-        "Identificação",
-        "Referência Contabilidade",
-        "Quantidade",
-        "Unidade",
-        "Stock Mínimo",
-        "Preço Unitário",
-        "Valor Inventário",
-        "Data de Entrada",
-      ],
-      filteredStock.map((item: any) => [
-        item.tag || "",
-        item.nome || "",
-        item.descricao || "",
-        item.identificacao || "",
-        item.referencia_contabilidade || "",
-        item.quantidade ?? 0,
-        UNIDADES_MEDIDA.find(
-          (u) => u.value === item.unidade_medida, // ✅ CORRETO: "item" está em scope
-        )?.label || "Unidades",
-        item.estoque_minimo ?? "",
-        item.preco_unitario != null
-          ? Number(item.preco_unitario).toFixed(2)
-          : "",
-        item.valor_inventario != null
-          ? Number(item.valor_inventario).toFixed(2)
-          : "",
-        formatDatePt(item.data_aquisicao),
-      ]),
+      ["Artigo", "Identificação", "Ref. Contab.", "Qtd.", "Unidade", "Preço Unit. (€)", "Valor Inv. (€)", "Stock Mín.", "Data Entrada"],
+      filteredStock.map((i: any) => [
+        i.nome ?? "", i.identificacao ?? "", i.referencia_contabilidade ?? "",
+        i.quantidade ?? 0, fmtUnit(i),
+        i.preco_unitario != null ? Number(i.preco_unitario).toFixed(2) : "",
+        i.preco_unitario != null ? (Number(i.preco_unitario) * Number(i.quantidade)).toFixed(2) : "",
+        i.estoque_minimo ?? "", fmtDate(i.data_aquisicao),
+      ])
     );
-  };
-  const exportMovementsCsv = () => {
+
+  const exportMovements = () =>
     downloadCsv(
-      `movimentos-stock-${
-        new Date().toISOString().split("T")[0]
-      }.csv`,
-      ["Data", "Ação", "Artigo", "Quem", "Quantidade"],
+      `movimentos-${new Date().toISOString().split("T")[0]}.csv`,
+      ["Data", "Tipo", "Artigo", "Quem", "Quantidade"],
       filteredMovements.map((m: any) => [
-        formatDatePt(m.data),
-        m.tipo === "levantamento"
-          ? "Levantamento"
-          : "Devolução",
-        m.item_nome || "Artigo Removido",
-        m.user_nome || "Utilizador Apagado",
-        m.quantidade ?? 0,
-      ]),
+        fmtDate(m.data), m.tipo === "levantamento" ? "Levantamento" : "Devolução",
+        m.item_nome ?? "Removido", m.user_nome ?? "Removido", m.quantidade ?? 0,
+      ])
     );
-  };
 
-  // ==================== BARRA DE TOPO: CATÁLOGO ====================
-  const StockHeaderBar = () => (
-    <div className="border-b border-zinc-100 p-4 dark:border-zinc-800">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-            Catálogo de Artigos
-          </h2>
-          <p className="mt-1 text-xs text-zinc-400">
-            A quantidade é atualizada em cada movimento.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            className="h-9"
-            onClick={() => setShowStockFilters((v) => !v)}
-          >
-            <Filter className="mr-2 h-4 w-4" />
-            Filtros
-            {activeStockFiltersCount > 0 && (
-              <Badge className="ml-2 border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400">
-                {activeStockFiltersCount}
-              </Badge>
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            className="h-9"
-            onClick={exportStockCsv}
-            disabled={filteredStock.length === 0}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Exportar CSV
-          </Button>
+  // ==================== RENDER ====================
+  return (
+    <div className="flex flex-col gap-0 h-full">
+      {/* ── Cabeçalho ERP ── */}
+      <div className="border-b border-zinc-200 bg-white px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-xs text-zinc-400">
+              <span>Intranet</span>
+              <span>/</span>
+              <span className="text-zinc-700 dark:text-zinc-300">Gestão de Stock</span>
+            </div>
+            <h1 className="mt-0.5 text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+              Inventário e Movimentos
+            </h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9"
+              onClick={handleRefresh}
+              title="Atualizar dados"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9"
+              onClick={tab === "stock" ? exportStock : exportMovements}
+            >
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              Exportar CSV
+            </Button>
+            <Button
+              size="sm"
+              className="h-9 bg-red-600 text-white hover:bg-red-700"
+              onClick={() => { resetItemForm(); setIsItemModal(true); }}
+            >
+              <PackagePlus className="mr-1.5 h-3.5 w-3.5" />
+              Novo Artigo
+            </Button>
+          </div>
         </div>
       </div>
 
-      {showStockFilters && (
-        <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-800/50">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-zinc-500 dark:text-zinc-400">
-                Tag
-              </Label>
-              <Input
-                value={stockFilters.tag}
-                onChange={(e) =>
-                  updateStockFilter("tag", e.target.value)
-                }
-                placeholder="Ex: A00001"
-                className="h-9 bg-white dark:bg-zinc-900"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-zinc-500 dark:text-zinc-400">
-                Artigo
-              </Label>
-              <Input
-                value={stockFilters.artigo}
-                onChange={(e) =>
-                  updateStockFilter("artigo", e.target.value)
-                }
-                placeholder="Ex: Parafuso M8"
-                className="h-9 bg-white dark:bg-zinc-900"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-zinc-500 dark:text-zinc-400">
-                Identificação
-              </Label>
-              <Input
-                value={stockFilters.identificacao}
-                onChange={(e) =>
-                  updateStockFilter(
-                    "identificacao",
-                    e.target.value,
-                  )
-                }
-                placeholder="Ex: A99999"
-                className="h-9 bg-white dark:bg-zinc-900"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-zinc-500 dark:text-zinc-400">
-                Referência de Contabilidade
-              </Label>
-              <Input
-                value={stockFilters.referenciaContabilidade}
-                onChange={(e) =>
-                  updateStockFilter(
-                    "referenciaContabilidade",
-                    e.target.value,
-                  )
-                }
-                placeholder="Ex: 62210001"
-                className="h-9 bg-white dark:bg-zinc-900"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-zinc-500 dark:text-zinc-400">
-                Estado
-              </Label>
-              <select
-                value={stockFilters.status}
-                onChange={(e) =>
-                  updateStockFilter(
-                    "status",
-                    e.target.value as
-                      "todos" | "esgotado" | "abaixo_minimo",
-                  )
-                }
-                className="h-9 w-full rounded-md border border-zinc-200 bg-white px-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                <option value="todos">Todos os estados</option>
-                <option value="esgotado">Esgotado</option>
-                <option value="abaixo_minimo">
-                  Abaixo do Mínimo
-                </option>
-              </select>
-            </div>
-          </div>
-          {activeStockFiltersCount > 0 && (
-            <div className="mt-3 flex justify-end">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearStockFilters}
-                className="h-8 text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
-              >
-                <X className="mr-1.5 h-3.5 w-3.5" />
-                Limpar Filtros
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-
-  // ==================== BARRA DE TOPO: MOVIMENTOS ====================
-  const MovementsHeaderBar = () => (
-    <div className="border-b border-zinc-100 p-4 dark:border-zinc-800">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-            Entregas e Devoluções
-          </h2>
-          <p className="mt-1 text-xs text-zinc-400">
-            Histórico de entradas e saídas de material.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
-            <Input
-              value={searchMov}
-              onChange={(e) => setSearchMov(e.target.value)}
-              className="h-9 w-48 pl-9"
-              placeholder="Pesquisar..."
-            />
-          </div>
-          <Button
-            variant="outline"
-            className="h-9"
-            onClick={() => setShowMovFilters((v) => !v)}
-          >
-            <Filter className="mr-2 h-4 w-4" />
-            Filtros
-            {activeMovFiltersCount > 0 && (
-              <Badge className="ml-2 border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400">
-                {activeMovFiltersCount}
-              </Badge>
-            )}
-          </Button>
-          <Button
-            variant="outline"
-            className="h-9"
-            onClick={exportMovementsCsv}
-            disabled={filteredMovements.length === 0}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Exportar CSV
-          </Button>
-        </div>
+      {/* ── KPI Strip ── */}
+      <div className="grid grid-cols-2 gap-3 border-b border-zinc-200 bg-zinc-50 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-900/50 sm:grid-cols-4">
+        <KpiCard
+          label="Referências Ativas"
+          value={String(totalRef)}
+          icon={Package}
+          accent="blue"
+        />
+        <KpiCard
+          label="Sem Stock"
+          value={String(semStock)}
+          sub={semStock > 0 ? "artigos esgotados" : "tudo em ordem"}
+          icon={TrendingDown}
+          accent={semStock > 0 ? "red" : "green"}
+        />
+        <KpiCard
+          label="Abaixo do Mínimo"
+          value={String(abaixoMin)}
+          sub={abaixoMin > 0 ? "reposição necessária" : "níveis normais"}
+          icon={AlertTriangle}
+          accent={abaixoMin > 0 ? "amber" : "green"}
+        />
+        <KpiCard
+          label="Valor em Inventário"
+          value={fmtEuro(valorTotal)}
+          sub="preço unitário × quantidade"
+          icon={Euro}
+          accent="blue"
+        />
       </div>
 
-      {showMovFilters && (
-        <div className="mt-4 grid gap-4 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-800/50 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-zinc-500 dark:text-zinc-400">
-              Tipo de Ação
-            </Label>
-            <div className="flex items-center gap-1 rounded-lg bg-white p-1 dark:bg-zinc-900">
-              {(
-                ["todos", "levantamento", "devolucao"] as const
-              ).map((t) => (
+      {/* ── Tabs ── */}
+      <div className="flex border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+        {(["stock", "movimentos"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-medium transition-colors ${
+              tab === t
+                ? "border-red-600 text-red-600 dark:text-red-400"
+                : "border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+            }`}
+          >
+            {t === "stock" ? <LayoutList className="h-4 w-4" /> : <History className="h-4 w-4" />}
+            {t === "stock" ? "Catálogo de Artigos" : "Entregas / Devoluções"}
+            <span className="ml-1 rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
+              {t === "stock" ? filteredStock.length : filteredMovements.length}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── Barra de ferramentas ── */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-zinc-100 bg-white px-5 py-2.5 dark:border-zinc-800 dark:bg-zinc-950">
+        {tab === "stock" ? (
+          <>
+            <div className="relative flex-1 min-w-[200px] max-w-xs">
+              <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-zinc-400" />
+              <Input
+                className="h-8 pl-8 text-sm"
+                placeholder="Pesquisar artigo, identificação..."
+                value={filters.search}
+                onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+              />
+            </div>
+
+            {/* Pills de status */}
+            <div className="flex gap-1">
+              {(["todos", "esgotado", "abaixo_minimo"] as const).map((s) => (
                 <button
-                  key={t}
-                  onClick={() => setTipoFilter(t)}
-                  className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
-                    tipoFilter === t
-                      ? "bg-red-600 text-white shadow-sm"
-                      : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  key={s}
+                  onClick={() => setFilters((f) => ({ ...f, status: s }))}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    filters.status === s
+                      ? s === "todos"
+                        ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900"
+                        : s === "esgotado"
+                          ? "bg-red-600 text-white"
+                          : "bg-amber-500 text-white"
+                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
                   }`}
                 >
-                  {t === "todos"
-                    ? "Todos"
-                    : t === "levantamento"
-                      ? "Levantamentos"
-                      : "Devoluções"}
+                  {s === "todos" ? "Todos" : s === "esgotado" ? "Esgotados" : "Abaixo do Mín."}
                 </button>
               ))}
             </div>
+
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 ml-auto"
+              onClick={() => setShowFilters((v) => !v)}
+            >
+              <Filter className="mr-1.5 h-3.5 w-3.5" />
+              Filtros Avançados
+              {activeCount > 0 && (
+                <Badge className="ml-1.5 h-4 min-w-4 bg-red-600 px-1 text-[10px] text-white">
+                  {activeCount}
+                </Badge>
+              )}
+            </Button>
+
+            {activeCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-zinc-500"
+                onClick={() => setFilters({ ...EMPTY_FILTERS })}
+              >
+                <X className="mr-1 h-3.5 w-3.5" />
+                Limpar
+              </Button>
+            )}
+          </>
+        ) : (
+          <>
+            <div className="relative flex-1 min-w-[200px] max-w-xs">
+              <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-zinc-400" />
+              <Input
+                className="h-8 pl-8 text-sm"
+                placeholder="Pesquisar artigo ou utilizador..."
+                value={searchMov}
+                onChange={(e) => setSearchMov(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-1">
+              {(["todos", "levantamento", "devolucao"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setTipoMov(t)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    tipoMov === t
+                      ? t === "todos"
+                        ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900"
+                        : t === "levantamento"
+                          ? "bg-rose-600 text-white"
+                          : "bg-emerald-600 text-white"
+                      : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                  }`}
+                >
+                  {t === "todos" ? "Todos" : t === "levantamento" ? "Levantamentos" : "Devoluções"}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Filtros avançados stock */}
+      {tab === "stock" && showFilters && (
+        <div className="border-b border-zinc-100 bg-zinc-50 px-5 py-3 dark:border-zinc-800 dark:bg-zinc-900/60">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-1">
+              <Label className="text-xs text-zinc-500">Identificação</Label>
+              <Input
+                className="h-8 text-sm"
+                placeholder="Ex: A99999"
+                value={filters.identificacao}
+                onChange={(e) => setFilters((f) => ({ ...f, identificacao: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs text-zinc-500">Ref. Contabilidade</Label>
+              <Input
+                className="h-8 text-sm"
+                placeholder="Ex: 62210001"
+                value={filters.referenciaContabilidade}
+                onChange={(e) => setFilters((f) => ({ ...f, referenciaContabilidade: e.target.value }))}
+              />
+            </div>
           </div>
         </div>
       )}
-    </div>
-  );
 
-  // ==================== RENDER: TABELA DE STOCK ====================
-  const renderStockTable = (items: any[]) => (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[760px] text-left">
-        <thead className="bg-zinc-50 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500 dark:bg-zinc-800/50 dark:text-zinc-400">
-          <tr>
-            <th
-              className="cursor-pointer select-none px-5 py-3"
-              onClick={() => toggleStockSort("tag")}
-            >
-              Tag{" "}
-              <SortIcon
-                active={stockSort.key === "tag"}
-                direction={stockSort.direction}
-              />
-            </th>
-            <th
-              className="cursor-pointer select-none px-5 py-3"
-              onClick={() => toggleStockSort("nome")}
-            >
-              Artigo{" "}
-              <SortIcon
-                active={stockSort.key === "nome"}
-                direction={stockSort.direction}
-              />
-            </th>
-            <th
-              className="cursor-pointer select-none px-4 py-3 text-right"
-              onClick={() => toggleStockSort("quantidade")}
-            >
-              Quantidade{" "}
-              <SortIcon
-                active={stockSort.key === "quantidade"}
-                direction={stockSort.direction}
-              />
-            </th>
-            <th
-              className="cursor-pointer select-none px-4 py-3 text-right"
-              onClick={() => toggleStockSort("quantidade")}
-            >
-              Quantidade{" "}
-              <SortIcon
-                active={stockSort.key === "quantidade"}
-                direction={stockSort.direction}
-              />
-            </th>
-            <th className="px-4 py-3">Unidade</th>
-            <th
-              className="cursor-pointer select-none px-4 py-3 text-right"
-              onClick={() => toggleStockSort("preco_unitario")}
-            >
-              Preço Unit.{" "}
-              <SortIcon
-                active={stockSort.key === "preco_unitario"}
-                direction={stockSort.direction}
-              />
-            </th>
-            <th
-              className="cursor-pointer select-none px-4 py-3 text-right"
-              onClick={() =>
-                toggleStockSort("valor_inventario")
-              }
-            >
-              Valor Inventário{" "}
-              <SortIcon
-                active={stockSort.key === "valor_inventario"}
-                direction={stockSort.direction}
-              />
-            </th>
-            <th
-              className="cursor-pointer select-none px-4 py-3"
-              onClick={() => toggleStockSort("data_aquisicao")}
-            >
-              Data de Entrada{" "}
-              <SortIcon
-                active={stockSort.key === "data_aquisicao"}
-                direction={stockSort.direction}
-              />
-            </th>
-            <th className="px-5 py-3 text-right">Ações</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-          {items.length ? (
-            items.map((item: any) => {
-              const isEsgotado = Number(item.quantidade) <= 0;
-              const isAbaixoMinimo =
-                item.estoque_minimo != null &&
-                Number(item.quantidade) <=
-                  Number(item.estoque_minimo);
-              return (
-                <tr
-                  key={item.id}
-                  className="group transition-colors hover:bg-zinc-50/70 dark:hover:bg-zinc-800/50"
-                >
-                  <td className="px-5 py-4 font-mono text-xs text-zinc-500 dark:text-zinc-400">
-                    {item.tag || "-"}
-                  </td>
-                  <td
-                    className="cursor-pointer px-5 py-4"
-                    onClick={() => openEditItem(item)}
-                  >
-                    <p className="font-medium text-zinc-800 dark:text-zinc-100">
-                      {item.nome}
-                    </p>
-                    <p className="mt-1 font-mono text-xs text-zinc-400">
-                      {item.identificacao || "-"}
-                    </p>
-                  </td>
-                  <td className="px-4 py-4 text-right">
-                    <Badge
-                      className={
-                        isEsgotado
-                          ? "border-red-600 bg-red-600 text-white dark:border-red-600 dark:bg-red-600"
-                          : isAbaixoMinimo
-                            ? "border-red-300 bg-red-100 text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300"
-                            : "border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-                      }
+      {/* ── Tabela Stock ── */}
+      {tab === "stock" && (
+        <div className="flex-1 overflow-auto bg-white dark:bg-zinc-950">
+          <table className="w-full min-w-[760px] text-left text-sm">
+            <thead className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+              <tr>
+                <th className="w-8 px-4 py-2.5 text-center text-zinc-300 dark:text-zinc-600">#</th>
+                <th className="cursor-pointer select-none px-4 py-2.5 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleStockSort("nome")}>
+                  Artigo <SortIcon active={stockSort.key === "nome"} dir={stockSort.dir} />
+                </th>
+                <th className="cursor-pointer select-none px-3 py-2.5 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleStockSort("identificacao")}>
+                  Identificação <SortIcon active={stockSort.key === "identificacao"} dir={stockSort.dir} />
+                </th>
+                <th className="cursor-pointer select-none px-3 py-2.5 text-right hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleStockSort("quantidade")}>
+                  Quantidade <SortIcon active={stockSort.key === "quantidade"} dir={stockSort.dir} />
+                </th>
+                <th className="px-3 py-2.5">Unid.</th>
+                <th className="cursor-pointer select-none px-3 py-2.5 text-right hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleStockSort("preco_unitario")}>
+                  P. Unit. <SortIcon active={stockSort.key === "preco_unitario"} dir={stockSort.dir} />
+                </th>
+                <th className="cursor-pointer select-none px-3 py-2.5 text-right hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleStockSort("data_aquisicao")}>
+                  Entrada <SortIcon active={stockSort.key === "data_aquisicao"} dir={stockSort.dir} />
+                </th>
+                <th className="px-4 py-2.5 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+              {pagedStock.length ? (
+                pagedStock.map((item: any, idx) => {
+                  const isOut = Number(item.quantidade) <= 0;
+                  const isLow =
+                    !isOut &&
+                    item.estoque_minimo != null &&
+                    Number(item.quantidade) < Number(item.estoque_minimo);
+                  const rowStart = (stockPage - 1) * PAGE_SIZE + idx + 1;
+                  return (
+                    <tr
+                      key={item.id}
+                      className={`group transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
+                        isOut ? "bg-red-50/40 dark:bg-red-950/10" : isLow ? "bg-amber-50/40 dark:bg-amber-950/10" : ""
+                      }`}
                     >
-                      {item.quantidade} unid.
-                    </Badge>
+                      <td className="px-4 py-2.5 text-center text-[11px] text-zinc-300 dark:text-zinc-600">{rowStart}</td>
+                      <td className="px-4 py-2.5">
+                        <button
+                          className="text-left"
+                          onClick={() => openEdit(item)}
+                        >
+                          <p className="font-medium text-zinc-800 hover:text-red-600 dark:text-zinc-100 dark:hover:text-red-400">
+                            {item.nome}
+                          </p>
+                          {item.descricao && (
+                            <p className="mt-0.5 text-[11px] text-zinc-400">{item.descricao}</p>
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                        {item.identificacao ?? "—"}
+                        {item.referencia_contabilidade && (
+                          <div className="text-[10px] text-zinc-400">{item.referencia_contabilidade}</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <span
+                          className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold ${
+                            isOut
+                              ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
+                              : isLow
+                                ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+                                : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                          }`}
+                        >
+                          {isOut && <AlertTriangle className="mr-1 h-3 w-3" />}
+                          {item.quantidade ?? 0}
+                        </span>
+                        {item.estoque_minimo != null && (
+                          <div className="mt-0.5 text-[10px] text-zinc-400">mín: {item.estoque_minimo}</div>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-zinc-500">{fmtUnit(item)}</td>
+                      <td className="px-3 py-2.5 text-right text-xs text-zinc-600 dark:text-zinc-300">
+                        {item.preco_unitario != null ? (
+                          <>
+                            <div>{fmtEuro(item.preco_unitario)}</div>
+                            <div className="text-[10px] text-zinc-400">
+                              {fmtEuro(Number(item.preco_unitario) * Number(item.quantidade))} total
+                            </div>
+                          </>
+                        ) : "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-zinc-500">{fmtDate(item.data_aquisicao)}</td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-300"
+                            onClick={() => { resetMovForm(); setMovementItem(item); }}
+                          >
+                            <ArrowDownToLine className="mr-1 h-3 w-3" />
+                            Mov.
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                            onClick={() => openEdit(item)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          {isAdmin && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-zinc-300 hover:bg-red-50 hover:text-red-600 dark:text-zinc-600 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+                              onClick={() => handleDeleteItem(item.id, item.nome)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              ) : (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center text-sm text-zinc-400">
+                    <Boxes className="mx-auto mb-3 h-8 w-8 text-zinc-200 dark:text-zinc-700" />
+                    Nenhum artigo encontrado com os filtros aplicados.
                   </td>
-                  <td className="px-4 py-4 text-right text-sm text-zinc-600 dark:text-zinc-300">
-                    {formatEuro(item.preco_unitario)}
-                  </td>
-                  <td className="px-4 py-4 text-right text-sm font-medium text-zinc-800 dark:text-zinc-100">
-                    {formatEuro(item.valor_inventario)}
-                  </td>
-                  <td className="px-4 py-4 text-sm text-zinc-500 dark:text-zinc-400">
-                    {formatDatePt(item.data_aquisicao)}
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
-                        onClick={() => openEditItem(item)}
+                </tr>
+              )}
+            </tbody>
+          </table>
+          <Pagination page={stockPage} total={filteredStock.length} pageSize={PAGE_SIZE} onChange={setStockPage} />
+        </div>
+      )}
+
+      {/* ── Tabela Movimentos ── */}
+      {tab === "movimentos" && (
+        <div className="flex-1 overflow-auto bg-white dark:bg-zinc-950">
+          <table className="w-full min-w-[640px] text-left text-sm">
+            <thead className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+              <tr>
+                <th className="w-8 px-4 py-2.5 text-center text-zinc-300 dark:text-zinc-600">#</th>
+                <th className="cursor-pointer select-none px-4 py-2.5 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleMovSort("data")}>
+                  Data <SortIcon active={movSort.key === "data"} dir={movSort.dir} />
+                </th>
+                <th className="cursor-pointer select-none px-3 py-2.5 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleMovSort("tipo")}>
+                  Tipo <SortIcon active={movSort.key === "tipo"} dir={movSort.dir} />
+                </th>
+                <th className="cursor-pointer select-none px-3 py-2.5 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleMovSort("item_nome")}>
+                  Artigo <SortIcon active={movSort.key === "item_nome"} dir={movSort.dir} />
+                </th>
+                <th className="cursor-pointer select-none px-3 py-2.5 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleMovSort("user_nome")}>
+                  Responsável <SortIcon active={movSort.key === "user_nome"} dir={movSort.dir} />
+                </th>
+                <th className="cursor-pointer select-none px-3 py-2.5 text-right hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleMovSort("quantidade")}>
+                  Qtd. <SortIcon active={movSort.key === "quantidade"} dir={movSort.dir} />
+                </th>
+                {isAdmin && <th className="w-12 px-4 py-2.5" />}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+              {pagedMovements.length ? (
+                pagedMovements.map((m: any, idx) => (
+                  <tr key={m.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-900">
+                    <td className="px-4 py-2.5 text-center text-[11px] text-zinc-300 dark:text-zinc-600">
+                      {(movPage - 1) * PAGE_SIZE + idx + 1}
+                    </td>
+                    <td className="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{fmtDate(m.data)}</td>
+                    <td className="px-3 py-2.5">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-bold uppercase ${
+                          m.tipo === "levantamento"
+                            ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400"
+                            : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+                        }`}
                       >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 text-zinc-700 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
-                        onClick={() => setMovementItem(item)}
-                      >
-                        <ArrowDownToLine className="mr-1.5 h-3.5 w-3.5" />
-                        Movimentar
-                      </Button>
-                      {canDelete && (
+                        {m.tipo === "levantamento"
+                          ? <ArrowUpFromLine className="h-3 w-3" />
+                          : <ArrowDownToLine className="h-3 w-3" />}
+                        {m.tipo === "levantamento" ? "Levantamento" : "Devolução"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 font-medium text-zinc-800 dark:text-zinc-100">
+                      {m.item_nome ?? <span className="italic text-zinc-400">Artigo removido</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-zinc-600 dark:text-zinc-400">
+                      {m.user_nome ?? <span className="italic text-zinc-400">Utilizador removido</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-semibold text-zinc-800 dark:text-zinc-100">
+                      {m.quantidade ?? 0}
+                    </td>
+                    {isAdmin && (
+                      <td className="px-4 py-2.5 text-right">
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:text-zinc-500 dark:hover:bg-red-950/30 dark:hover:text-red-400"
-                          onClick={() =>
-                            handleDeleteItem(item.id, item.nome)
-                          }
+                          className="h-7 w-7 text-zinc-300 hover:bg-red-50 hover:text-red-600 dark:text-zinc-600 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+                          onClick={() => { if (confirm("Remover este registo?")) deleteStockMovement(m.id); }}
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
-                      )}
-                    </div>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={isAdmin ? 7 : 6} className="py-16 text-center text-sm text-zinc-400">
+                    Nenhum registo de movimento encontrado.
                   </td>
                 </tr>
-              );
-            })
-          ) : (
-            <tr>
-              <td
-                colSpan={7}
-                className="px-5 py-16 text-center text-sm text-zinc-400"
-              >
-                <Boxes className="mx-auto mb-3 h-7 w-7 text-zinc-300" />
-                Não foram encontrados artigos.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-
-  // ==================== RENDER: TABELA DE MOVIMENTOS ====================
-  const renderMovementsTable = (items: any[]) => (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-left">
-        <thead className="bg-zinc-50 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500 dark:bg-zinc-800/50 dark:text-zinc-400">
-          <tr>
-            <th
-              className="cursor-pointer select-none px-5 py-3"
-              onClick={() => toggleMovSort("data")}
-            >
-              Data{" "}
-              <SortIcon
-                active={movSort.key === "data"}
-                direction={movSort.direction}
-              />
-            </th>
-            <th
-              className="cursor-pointer select-none px-4 py-3"
-              onClick={() => toggleMovSort("tipo")}
-            >
-              Ação{" "}
-              <SortIcon
-                active={movSort.key === "tipo"}
-                direction={movSort.direction}
-              />
-            </th>
-            <th
-              className="cursor-pointer select-none px-4 py-3"
-              onClick={() => toggleMovSort("item_nome")}
-            >
-              Artigo{" "}
-              <SortIcon
-                active={movSort.key === "item_nome"}
-                direction={movSort.direction}
-              />
-            </th>
-            <th
-              className="cursor-pointer select-none px-4 py-3"
-              onClick={() => toggleMovSort("user_nome")}
-            >
-              Quem{" "}
-              <SortIcon
-                active={movSort.key === "user_nome"}
-                direction={movSort.direction}
-              />
-            </th>
-            <th
-              className="cursor-pointer select-none px-4 py-3 text-right"
-              onClick={() => toggleMovSort("quantidade")}
-            >
-              Quantidade{" "}
-              <SortIcon
-                active={movSort.key === "quantidade"}
-                direction={movSort.direction}
-              />
-            </th>
-            {canDelete && <th className="px-5 py-3"></th>}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-          {items.length ? (
-            items.map((m: any) => (
-              <tr
-                key={m.id}
-                className="hover:bg-zinc-50/70 dark:hover:bg-zinc-800/50"
-              >
-                <td className="px-5 py-3 text-sm text-zinc-600 dark:text-zinc-400">
-                  {formatDatePt(m.data)}
-                </td>
-                <td className="px-4 py-3">
-                  <span
-                    className={`rounded px-2 py-0.5 text-xs font-bold uppercase ${
-                      m.tipo === "levantamento"
-                        ? "bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400"
-                        : "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
-                    }`}
-                  >
-                    {m.tipo}
-                  </span>
-                </td>
-                <td className="px-4 py-3 font-medium text-zinc-800 dark:text-zinc-100">
-                  {m.item_nome || "Artigo Removido"}
-                </td>
-                <td className="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-400">
-                  {m.user_nome || "Utilizador Apagado"}
-                </td>
-                <td className="px-4 py-3 text-right font-medium text-zinc-800 dark:text-zinc-100">
-                  {m.quantidade} unid.
-                </td>
-                {canDelete && (
-                  <td className="px-5 py-3 text-right">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:text-zinc-500 dark:hover:bg-red-950/30 dark:hover:text-red-400"
-                      onClick={() => handleDeleteMovement(m.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </td>
-                )}
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td
-                colSpan={canDelete ? 6 : 5}
-                className="px-5 py-14 text-center text-sm text-zinc-400"
-              >
-                Nenhum registo de movimento encontrado.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-
-  // ==================== RENDER PRINCIPAL ====================
-  return (
-    <div className="mx-auto max-w-7xl space-y-7">
-      {/* Header */}
-      <header className="flex flex-col gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-red-600">
-            INVENTÁRIO
-          </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Gestão de Stock
-          </h1>
-          <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-            Registe artigos, acompanhe quantidades e mantenha o
-            histórico de entregas e devoluções.
-          </p>
+              )}
+            </tbody>
+          </table>
+          <Pagination page={movPage} total={filteredMovements.length} pageSize={PAGE_SIZE} onChange={setMovPage} />
         </div>
-        <Dialog
-          open={isItemModalOpen}
-          onOpenChange={(open) => {
-            setIsItemModalOpen(open);
-            if (!open) resetItemForm();
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button
-              onClick={openCreateItem}
-              className="h-10 bg-red-600 text-white hover:bg-red-700"
-            >
-              <PackagePlus className="mr-2 h-4 w-4" />
-              Novo Artigo
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>
-                {editingItem
-                  ? "Editar Artigo"
-                  : "Novo Artigo de Stock"}
-              </DialogTitle>
-              <DialogDescription>
-                {editingItem
-                  ? "Atualize os detalhes do artigo."
-                  : "Cria o item de inventário para permitir entregas/devoluções."}
-              </DialogDescription>
-            </DialogHeader>
-            <form
-              className="mt-3 space-y-4"
-              onSubmit={handleSubmitItem}
-            >
-              <div className="space-y-2">
-                <Label htmlFor="nome">
-                  Designação do Artigo *
-                </Label>
-                <Input
-                  id="nome"
-                  placeholder="Ex: Parafuso M8"
-                  required
-                  value={itemData.nome}
-                  onChange={(e) =>
-                    setItemData({
-                      ...itemData,
-                      nome: e.target.value,
-                    })
-                  }
-                />
+      )}
+
+      {/* ── Modal: Artigo ── */}
+      <Dialog open={isItemModal} onOpenChange={(o) => { setIsItemModal(o); if (!o) resetItemForm(); }}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingItem ? "Editar Artigo" : "Novo Artigo de Stock"}</DialogTitle>
+            <DialogDescription>
+              {editingItem ? "Actualize os detalhes do artigo." : "Preencha os dados para registar um novo artigo no inventário."}
+            </DialogDescription>
+          </DialogHeader>
+          <form className="mt-2 space-y-4" onSubmit={handleSubmitItem}>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2 space-y-1.5">
+                <Label htmlFor="i-nome">Designação *</Label>
+                <Input id="i-nome" required placeholder="Ex: Parafuso M8 × 20" value={itemData.nome}
+                  onChange={(e) => setItemData((d) => ({ ...d, nome: e.target.value }))} />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="descricao">Descrição</Label>
-                <Input
-                  id="descricao"
-                  placeholder="Ex: 10mm"
-                  value={itemData.descricao}
-                  onChange={(e) =>
-                    setItemData({
-                      ...itemData,
-                      descricao: e.target.value,
-                    })
-                  }
-                />
+              <div className="sm:col-span-2 space-y-1.5">
+                <Label htmlFor="i-desc">Descrição</Label>
+                <Input id="i-desc" placeholder="Informação adicional" value={itemData.descricao}
+                  onChange={(e) => setItemData((d) => ({ ...d, descricao: e.target.value }))} />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="identificacao">
-                  Identificação *
-                </Label>
-                <Input
-                  id="identificacao"
-                  placeholder="Ex: A99999"
-                  required
-                  value={itemData.identificacao}
-                  onChange={(e) =>
-                    setItemData({
-                      ...itemData,
-                      identificacao: e.target.value,
-                    })
-                  }
-                />
+              <div className="space-y-1.5">
+                <Label htmlFor="i-id">Identificação *</Label>
+                <Input id="i-id" required placeholder="Ex: A99999" value={itemData.identificacao}
+                  onChange={(e) => setItemData((d) => ({ ...d, identificacao: e.target.value }))} />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="referenciaContabilidade">
-                  Referência de Contabilidade
-                </Label>
-                <Input
-                  id="referenciaContabilidade"
-                  placeholder="Ex: 62210001"
-                  value={itemData.referenciaContabilidade}
-                  onChange={(e) =>
-                    setItemData({
-                      ...itemData,
-                      referenciaContabilidade: e.target.value,
-                    })
-                  }
-                />
+              <div className="space-y-1.5">
+                <Label htmlFor="i-ref">Ref. Contabilidade</Label>
+                <Input id="i-ref" placeholder="Ex: 62210001" value={itemData.referenciaContabilidade}
+                  onChange={(e) => setItemData((d) => ({ ...d, referenciaContabilidade: e.target.value }))} />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="unidade_medida">
-                  Unidade de Medida *
-                </Label>
-                <select
-                  id="unidade_medida"
-                  required
-                  value={itemData.unidade_medida}
-                  onChange={(e) =>
-                    setItemData({
-                      ...itemData,
-                      unidade_medida: e.target.value,
-                    })
-                  }
-                  className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                >
-                  {UNIDADES_MEDIDA.map((u) => (
-                    <option key={u.value} value={u.value}>
-                      {u.label}
-                    </option>
-                  ))}
+              <div className="space-y-1.5">
+                <Label htmlFor="i-uni">Unidade de Medida</Label>
+                <select id="i-uni" value={itemData.unidade_medida}
+                  onChange={(e) => setItemData((d) => ({ ...d, unidade_medida: e.target.value }))}
+                  className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+                  {UNIDADES.map((u) => <option key={u.value} value={u.value}>{u.value} ({u.label})</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="precoUnitario">
-                    Preço Unitário (€)
-                  </Label>
-                  <Input
-                    id="precoUnitario"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={itemData.precoUnitario}
-                    onChange={(e) =>
-                      setItemData({
-                        ...itemData,
-                        precoUnitario: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="estoqueMinimo">
-                    Stock Mínimo
-                  </Label>
-                  <Input
-                    id="estoqueMinimo"
-                    type="number"
-                    min="0"
-                    value={itemData.estoqueMinimo}
-                    onChange={(e) =>
-                      setItemData({
-                        ...itemData,
-                        estoqueMinimo: e.target.value,
-                      })
-                    }
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="i-data">Data de Entrada *</Label>
+                <Input id="i-data" type="date" required value={itemData.data_aquisicao}
+                  onChange={(e) => setItemData((d) => ({ ...d, data_aquisicao: e.target.value }))} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="quantidade">
-                    Quantidade {editingItem ? "" : "Inicial"} *
-                  </Label>
-                  <Input
-                    id="quantidade"
-                    type="number"
-                    min="0"
-                    required
-                    value={itemData.quantidade}
-                    onChange={(e) =>
-                      setItemData({
-                        ...itemData,
-                        quantidade: Math.max(
-                          0,
-                          parseInt(e.target.value) || 0,
-                        ),
-                      })
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="data_aquisicao">
-                    Data de Entrada *
-                  </Label>
-                  <Input
-                    id="data_aquisicao"
-                    type="date"
-                    required
-                    value={itemData.data_aquisicao}
-                    onChange={(e) =>
-                      setItemData({
-                        ...itemData,
-                        data_aquisicao: e.target.value,
-                      })
-                    }
-                  />
-                </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="i-qtd">Quantidade {editingItem ? "" : "Inicial"} *</Label>
+                <Input id="i-qtd" type="number" min="0" required value={itemData.quantidade}
+                  onChange={(e) => setItemData((d) => ({ ...d, quantidade: Math.max(0, parseInt(e.target.value) || 0) }))} />
               </div>
-              <div className="mt-2 flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setIsItemModalOpen(false);
-                    resetItemForm();
-                  }}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  className="bg-red-600 hover:bg-red-700"
-                >
-                  {editingItem
-                    ? "Guardar Alterações"
-                    : "Guardar Artigo"}
-                </Button>
+              <div className="space-y-1.5">
+                <Label htmlFor="i-min">Stock Mínimo</Label>
+                <Input id="i-min" type="number" min="0" placeholder="0" value={itemData.estoqueMinimo}
+                  onChange={(e) => setItemData((d) => ({ ...d, estoqueMinimo: e.target.value }))} />
               </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </header>
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="i-preco">Preço Unitário (€)</Label>
+                <Input id="i-preco" type="number" min="0" step="0.01" placeholder="0.00" value={itemData.precoUnitario}
+                  onChange={(e) => setItemData((d) => ({ ...d, precoUnitario: e.target.value }))} />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t pt-3">
+              <Button type="button" variant="outline" onClick={() => { setIsItemModal(false); resetItemForm(); }}>Cancelar</Button>
+              <Button type="submit" className="bg-red-600 hover:bg-red-700">
+                {editingItem ? "Guardar Alterações" : "Criar Artigo"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-      {/* Mini métricas */}
-      <section className="grid gap-4 sm:grid-cols-3">
-        <MiniMetric label="Referências" value={"+10000"} />
-        <MiniMetric
-          label="Artigos Sem Stock"
-          value={semStock}
-          warning
-        />
-        <MiniMetric
-          label="Unidades em Armazém"
-          value={totalUnidades}
-        />
-      </section>
-
-      {/* Catálogo de artigos */}
-      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <StockHeaderBar />
-
-        {renderStockTable(visibleStock)}
-
-        {filteredStock.length > PREVIEW_LIMIT && (
-          <div className="border-t border-zinc-100 p-3 text-center dark:border-zinc-800">
-            <Dialog
-              open={stockExpanded}
-              onOpenChange={setStockExpanded}
-            >
-              <DialogTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-red-600 hover:text-red-700"
-                >
-                  <Maximize2 className="mr-2 h-3.5 w-3.5" />
-                  Ver todos ({filteredStock.length})
-                </Button>
-              </DialogTrigger>
-              <DialogContent
-                className="overflow-y-auto"
-                style={{
-                  width: "98vw",
-                  maxWidth: "98vw",
-                  height: "95vh",
-                  maxHeight: "95vh",
-                }}
-              >
-                <DialogHeader>
-                  <DialogTitle>
-                    Catálogo de Artigos ({filteredStock.length})
-                  </DialogTitle>
-                  <DialogDescription>
-                    Lista completa, com a mesma pesquisa e
-                    filtros aplicados.
-                  </DialogDescription>
-                </DialogHeader>
-                <StockHeaderBar />
-                {renderStockTable(filteredStock)}
-              </DialogContent>
-            </Dialog>
-          </div>
-        )}
-      </section>
-
-      {/* Histórico de movimentos */}
-      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <MovementsHeaderBar />
-
-        {renderMovementsTable(visibleMovements)}
-
-        {filteredMovements.length > PREVIEW_LIMIT && (
-          <div className="border-t border-zinc-100 p-3 text-center dark:border-zinc-800">
-            <Dialog
-              open={movementsExpanded}
-              onOpenChange={setMovementsExpanded}
-            >
-              <DialogTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-red-600 hover:text-red-700"
-                >
-                  <Maximize2 className="mr-2 h-3.5 w-3.5" />
-                  Ver todos ({filteredMovements.length})
-                </Button>
-              </DialogTrigger>
-              <DialogContent
-                className="overflow-y-auto"
-                style={{
-                  width: "98vw",
-                  maxWidth: "98vw",
-                  height: "95vh",
-                  maxHeight: "95vh",
-                }}
-              >
-                <DialogHeader>
-                  <DialogTitle>
-                    Entregas e Devoluções (
-                    {filteredMovements.length})
-                  </DialogTitle>
-                  <DialogDescription>
-                    Lista completa, com a mesma pesquisa e
-                    filtros aplicados.
-                  </DialogDescription>
-                </DialogHeader>
-                <MovementsHeaderBar />
-                {renderMovementsTable(filteredMovements)}
-              </DialogContent>
-            </Dialog>
-          </div>
-        )}
-      </section>
-
-      {/* Modal de movimento */}
-      <Dialog
-        open={Boolean(movementItem)}
-        onOpenChange={(open) => {
-          if (!open) {
-            resetMovementForm();
-            setMovementItem(null);
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
+      {/* ── Modal: Movimento ── */}
+      <Dialog open={Boolean(movementItem)} onOpenChange={(o) => { if (!o) { resetMovForm(); setMovementItem(null); } }}>
+        <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Registar Movimento</DialogTitle>
             <DialogDescription>
-              Desconta no stock ao levantar e soma ao devolver.
+              Levantamento desconta do stock. Devolução repõe.
             </DialogDescription>
           </DialogHeader>
           {movementItem && (
-            <form
-              className="mt-3 space-y-4"
-              onSubmit={handleAddMovement}
-            >
-              <div className="rounded-lg bg-zinc-50 p-3 dark:bg-zinc-800">
-                <p className="font-medium text-zinc-800 dark:text-zinc-100">
-                  {movementItem.nome}
-                </p>
-                <p className="mt-1 font-mono text-xs text-zinc-400">
+            <form className="space-y-4" onSubmit={handleAddMovement}>
+              {/* Artigo selecionado */}
+              <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800">
+                <p className="font-semibold text-zinc-800 dark:text-zinc-100">{movementItem.nome}</p>
+                <p className="mt-0.5 text-xs text-zinc-500">
                   {movementItem.identificacao} · Disponível:{" "}
-                  {movementItem.quantidade} unid.
+                  <strong>{movementItem.quantidade} {fmtUnit(movementItem)}</strong>
                 </p>
               </div>
 
+              {/* Tipo */}
               <div className="grid grid-cols-2 gap-2">
-                <Button
+                <button
                   type="button"
-                  variant={
-                    movData.tipo === "devolucao"
-                      ? "default"
-                      : "outline"
-                  }
-                  className={
-                    movData.tipo === "devolucao"
-                      ? "bg-emerald-600 hover:bg-emerald-700"
-                      : ""
-                  }
-                  onClick={() =>
-                    setMovData({
-                      ...movData,
-                      tipo: "devolucao",
-                    })
-                  }
+                  onClick={() => setMovData((d) => ({ ...d, tipo: "levantamento" }))}
+                  className={`flex items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition-colors ${
+                    movData.tipo === "levantamento"
+                      ? "border-rose-600 bg-rose-600 text-white"
+                      : "border-zinc-200 text-zinc-600 hover:border-rose-300 dark:border-zinc-700 dark:text-zinc-300"
+                  }`}
                 >
-                  <ArrowDownToLine className="mr-2 h-4 w-4" />
-                  Devolução
-                </Button>
-                <Button
+                  <ArrowUpFromLine className="h-4 w-4" /> Levantamento
+                </button>
+                <button
                   type="button"
-                  variant={
-                    movData.tipo === "levantamento"
-                      ? "default"
-                      : "outline"
-                  }
-                  className={
-                    movData.tipo === "levantamento"
-                      ? "bg-rose-600 hover:bg-rose-700"
-                      : ""
-                  }
-                  onClick={() =>
-                    setMovData({
-                      ...movData,
-                      tipo: "levantamento",
-                    })
-                  }
+                  onClick={() => setMovData((d) => ({ ...d, tipo: "devolucao" }))}
+                  className={`flex items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition-colors ${
+                    movData.tipo === "devolucao"
+                      ? "border-emerald-600 bg-emerald-600 text-white"
+                      : "border-zinc-200 text-zinc-600 hover:border-emerald-300 dark:border-zinc-700 dark:text-zinc-300"
+                  }`}
                 >
-                  <ArrowUpFromLine className="mr-2 h-4 w-4" />
-                  Levantamento
-                </Button>
+                  <ArrowDownToLine className="h-4 w-4" /> Devolução
+                </button>
               </div>
+
+              {/* Destino (levantamento) */}
               {movData.tipo === "levantamento" && (
                 <div className="space-y-2">
-                  <Label>Atribuir a *</Label>
+                  <Label className="text-xs">Destino *</Label>
                   <div className="grid grid-cols-2 gap-2">
-                    <Button
+                    <button
                       type="button"
-                      variant={
+                      onClick={() => setMovData((d) => ({ ...d, isManutencao: false }))}
+                      className={`rounded-lg border py-1.5 text-xs font-medium transition-colors ${
                         !movData.isManutencao
-                          ? "default"
-                          : "outline"
-                      }
-                      className={
-                        !movData.isManutencao
-                          ? "bg-red-600 hover:bg-red-700"
-                          : ""
-                      }
-                      onClick={() =>
-                        setMovData({
-                          ...movData,
-                          isManutencao: false,
-                        })
-                      }
+                          ? "border-red-600 bg-red-600 text-white"
+                          : "border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+                      }`}
                     >
                       Projeto
-                    </Button>
-                    <Button
+                    </button>
+                    <button
                       type="button"
-                      variant={
+                      onClick={() => setMovData((d) => ({ ...d, isManutencao: true, jobId: "" }))}
+                      className={`rounded-lg border py-1.5 text-xs font-medium transition-colors ${
                         movData.isManutencao
-                          ? "default"
-                          : "outline"
-                      }
-                      className={
-                        movData.isManutencao
-                          ? "bg-zinc-800 hover:bg-zinc-900"
-                          : ""
-                      }
-                      onClick={() =>
-                        setMovData({
-                          ...movData,
-                          isManutencao: true,
-                          jobId: "",
-                        })
-                      }
+                          ? "border-zinc-700 bg-zinc-700 text-white"
+                          : "border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
+                      }`}
                     >
                       Manutenção
-                    </Button>
+                    </button>
                   </div>
                   {!movData.isManutencao && (
                     <select
                       required
                       value={movData.jobId}
-                      onChange={(e) =>
-                        setMovData({
-                          ...movData,
-                          jobId: e.target.value,
-                        })
-                      }
-                      className="mt-2 w-full rounded-md border border-zinc-200 bg-transparent p-2 text-sm dark:border-zinc-700"
+                      onChange={(e) => setMovData((d) => ({ ...d, jobId: e.target.value }))}
+                      className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                     >
-                      <option value="">
-                        Selecionar projeto...
-                      </option>
-                      {jobs.map((j: any) => (
-                        <option key={j.id} value={j.id}>
-                          {j.title}
-                        </option>
-                      ))}
+                      <option value="">Selecionar projeto...</option>
+                      {jobs.map((j: any) => <option key={j.id} value={j.id}>{j.title}</option>)}
                     </select>
                   )}
                 </div>
               )}
-              <div className="space-y-2">
-                <Label htmlFor="mov-user">Quem *</Label>
+
+              {/* Responsável */}
+              <div className="space-y-1.5">
+                <Label htmlFor="m-user" className="text-xs">Responsável *</Label>
                 <select
-                  id="mov-user"
+                  id="m-user"
                   required
-                  className="w-full rounded-md border border-zinc-200 bg-transparent p-2 text-sm dark:border-zinc-700"
                   value={movData.user_id}
-                  onChange={(e) =>
-                    setMovData({
-                      ...movData,
-                      user_id: e.target.value,
-                    })
-                  }
+                  onChange={(e) => setMovData((d) => ({ ...d, user_id: e.target.value }))}
+                  className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
                 >
-                  <option value="">
-                    Selecione o utilizador...
-                  </option>
+                  <option value="">Selecionar utilizador...</option>
                   {users.map((u: any) => (
-                    <option key={u.id} value={u.id}>
-                      {u.nome}
-                    </option>
+                    <option key={u.id} value={u.id}>{u.nome}</option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="mov-qtd">Quantidade *</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="m-qtd" className="text-xs">Quantidade *</Label>
                   <Input
-                    id="mov-qtd"
-                    type="number"
-                    min="1"
-                    required
+                    id="m-qtd" type="number" min="1" required
                     value={movData.quantidade}
-                    onChange={(e) =>
-                      setMovData({
-                        ...movData,
-                        quantidade: Math.max(
-                          1,
-                          parseInt(e.target.value) || 1,
-                        ),
-                      })
-                    }
+                    onChange={(e) => setMovData((d) => ({ ...d, quantidade: Math.max(1, parseInt(e.target.value) || 1) }))}
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="mov-data">Data *</Label>
+                <div className="space-y-1.5">
+                  <Label htmlFor="m-data" className="text-xs">Data *</Label>
                   <Input
-                    id="mov-data"
-                    type="date"
-                    required
+                    id="m-data" type="date" required
                     value={movData.data}
-                    onChange={(e) =>
-                      setMovData({
-                        ...movData,
-                        data: e.target.value,
-                      })
-                    }
+                    onChange={(e) => setMovData((d) => ({ ...d, data: e.target.value }))}
                   />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 border-t pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    resetMovementForm();
-                    setMovementItem(null);
-                  }}
-                >
+              <div className="flex justify-end gap-2 border-t pt-3">
+                <Button type="button" variant="outline" onClick={() => { resetMovForm(); setMovementItem(null); }}>
                   Cancelar
                 </Button>
                 <Button
                   type="submit"
-                  className={
-                    movData.tipo === "devolucao"
-                      ? "bg-emerald-600 hover:bg-emerald-700"
-                      : "bg-rose-600 hover:bg-rose-700"
-                  }
+                  className={movData.tipo === "devolucao" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-rose-600 hover:bg-rose-700"}
                 >
-                  Confirmar Registo
+                  Confirmar
                 </Button>
               </div>
             </form>
