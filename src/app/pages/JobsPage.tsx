@@ -1,8 +1,6 @@
 // src/app/pages/JobsPage.tsx
 
 import { useState, useEffect, useMemo } from "react";
-const FRESAVE_LOGO_URL =
-  "https://static.wixstatic.com/media/a7ac0c_09785672c3cb48039040f69fa2685900~mv2_d_6384_2650_s_4_2.png/v1/fill/w_200,h_78,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Fresave%20Logotipo.png";
 import { useApp } from "../AppContext";
 import {
   jobsAPI,
@@ -32,12 +30,14 @@ import {
   FileCheck2,
   Loader2,
   Plus,
-  UserRound,
   Users,
   Pencil,
   Trash2,
   Check,
 } from "lucide-react";
+
+const FRESAVE_LOGO_URL =
+  "https://static.wixstatic.com/media/a7ac0c_09785672c3cb48039040f69fa2685900~mv2_d_6384_2650_s_4_2.png/v1/fill/w_200,h_78,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Fresave%20Logotipo.png";
 
 const formatDate = (value: string) =>
   new Intl.DateTimeFormat("pt-PT", {
@@ -72,21 +72,31 @@ const localDateTimeInput = (existing?: string) => {
     .slice(0, 16);
 };
 
-async function getLogoDataUrl(): Promise<string> {
-  const response = await fetch(fresaveLogoUrl);
-  const blob = await response.blob();
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
+// Fases fixas (iguais para todos os trabalhos) + progresso guardado na BD
+type Stage = {
+  key: string;
+  label: string;
+  checked: boolean;
+  checked_at: string | null;
+};
+
+const getStages = (job: any): Stage[] =>
+  JOB_CHECKLIST_ITEMS.map((stage) => {
+    const row = (job.checklist || []).find(
+      (c: any) => c.item_key === stage.key,
+    );
+    return {
+      key: stage.key,
+      label: stage.label,
+      checked: Boolean(row?.checked),
+      checked_at: row?.checked_at ?? null,
+    };
   });
-}
 
 function downloadReportDoc(job: any) {
-  const checklistRows = (job.checklist || [])
+  const checklistRows = getStages(job)
     .map(
-      (item: any, index: number) => `
+      (item, index) => `
         <tr style="background:${index % 2 === 0 ? "#ffffff" : "#fafafa"};">
           <td style="padding:10px 14px; border:1px solid #e4e4e7; font-size:13px;">
             <span style="color:${item.checked ? "#16a34a" : "#a1a1aa"}; font-weight:bold;">
@@ -166,6 +176,7 @@ function downloadReportDoc(job: any) {
 
         <table class="meta-grid">
           <tr><td class="meta-label">Referência</td><td class="meta-value">${job.reference || "-"}</td></tr>
+          <tr><td class="meta-label">Tipo</td><td class="meta-value">${job.non_standard ? "Trabalho não tipo" : "Trabalho tipo"}</td></tr>
           <tr><td class="meta-label">Departamento</td><td class="meta-value">${job.department || "-"}</td></tr>
           <tr><td class="meta-label">Funcionários</td><td class="meta-value">${(job.assignees || []).map((a: any) => a.nome).join(", ") || "-"}</td></tr>
         </table>
@@ -176,7 +187,7 @@ function downloadReportDoc(job: any) {
             : ""
         }
 
-        <h2>Checklist de Fases</h2>
+        <h2>Fases do Projeto</h2>
         <table class="checklist">
           <tr><th>Fase</th><th>Concluída em</th></tr>
           ${checklistRows}
@@ -224,20 +235,19 @@ export function JobsPage() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
-  const [editingJob, setEditingJob] = useState<any | null>(
+  const [editingJob, setEditingJob] = useState<any | null>(null);
+  const [jobToComplete, setJobToComplete] = useState<any | null>(
     null,
   );
-  const [jobToComplete, setJobToComplete] = useState<
-    any | null
-  >(null);
 
   const canCreate =
     currentUser?.role === "administrador" ||
     currentUser?.role === "projeto" ||
     currentUser?.role === "chefe_producao";
 
-  const loadAll = async () => {
-    setLoading(true);
+  // silent = recarrega sem mostrar o spinner (usado depois de marcar fases)
+  const loadAll = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const [jobsData, tasksData] = await Promise.all([
         jobsAPI.getAll(),
@@ -248,7 +258,7 @@ export function JobsPage() {
     } catch (error) {
       console.error("Erro ao carregar trabalhos:", error);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -257,8 +267,7 @@ export function JobsPage() {
   }, []);
 
   const isOverdue = (job: any) => {
-    const pastDueDate =
-      new Date(job.due_date).getTime() < Date.now();
+    const pastDueDate = new Date(job.due_date).getTime() < Date.now();
     if (pastDueDate) return true;
     if (job.max_hours) {
       const consumed = calcJobHoursConsumed(job, tasks);
@@ -268,8 +277,7 @@ export function JobsPage() {
   };
 
   const isChecklistComplete = (job: any) =>
-    (job.checklist || []).length > 0 &&
-    (job.checklist || []).every((c: any) => c.checked);
+    getStages(job).every((s) => s.checked);
 
   const active = useMemo(
     () => jobs.filter((j) => j.status === "em_curso"),
@@ -284,29 +292,49 @@ export function JobsPage() {
     [active, tasks],
   );
 
-  const handleToggleChecklist = async (
-    itemId: string,
+  const handleToggleStage = async (
+    jobId: string,
+    stageKey: string,
     checked: boolean,
   ) => {
+    // Atualiza logo no ecrã, sem esperar pela base de dados
+    const checkedAt = checked ? new Date().toISOString() : null;
+    setJobs((current) =>
+      current.map((job) => {
+        if (job.id !== jobId) return job;
+        const rows = job.checklist || [];
+        const exists = rows.some((r: any) => r.item_key === stageKey);
+        const checklist = exists
+          ? rows.map((r: any) =>
+              r.item_key === stageKey
+                ? { ...r, checked, checked_at: checkedAt }
+                : r,
+            )
+          : [
+              ...rows,
+              { item_key: stageKey, checked, checked_at: checkedAt },
+            ];
+        return { ...job, checklist };
+      }),
+    );
+
     try {
-      await jobsAPI.toggleChecklistItem(
-        itemId,
+      await jobsAPI.toggleStage(
+        jobId,
+        stageKey,
         checked,
         currentUser?.id,
       );
-      await loadAll();
     } catch (error) {
-      console.error("Erro ao atualizar checklist:", error);
-      alert("Erro ao atualizar checklist.");
+      console.error("Erro ao atualizar fase:", error);
+      alert("Erro ao atualizar fase.");
+    } finally {
+      await loadAll(true);
     }
   };
 
   const handleDeleteJob = async (id: string) => {
-    if (
-      confirm(
-        "Eliminar este trabalho? Esta ação não pode ser desfeita.",
-      )
-    ) {
+    if (confirm("Eliminar este trabalho? Esta ação não pode ser desfeita.")) {
       try {
         await jobsAPI.delete(id);
         await loadAll();
@@ -328,9 +356,9 @@ export function JobsPage() {
             Trabalhos e Relatórios
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-            Cada trabalho tem um prazo, um checklist de fases e,
-            opcionalmente, um limite de horas. Só é possível
-            concluir depois de todas as fases estarem marcadas.
+            Cada trabalho tem um prazo, as mesmas fases de produção e,
+            opcionalmente, um limite de horas. Só é possível concluir
+            depois de todas as fases estarem marcadas.
           </p>
         </div>
         {canCreate && (
@@ -353,9 +381,7 @@ export function JobsPage() {
             <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
               <DialogHeader>
                 <DialogTitle>
-                  {editingJob
-                    ? "Editar Trabalho"
-                    : "Criar Trabalho"}
+                  {editingJob ? "Editar Trabalho" : "Criar Trabalho"}
                 </DialogTitle>
               </DialogHeader>
               <JobForm
@@ -365,7 +391,7 @@ export function JobsPage() {
                   setCreateOpen(false);
                   setEditingJob(null);
                 }}
-                onSaved={loadAll}
+                onSaved={() => loadAll()}
               />
             </DialogContent>
           </Dialog>
@@ -417,13 +443,12 @@ export function JobsPage() {
                   key={job.id}
                   job={job}
                   overdue={isOverdue(job)}
-                  hoursConsumed={calcJobHoursConsumed(
-                    job,
-                    tasks,
-                  )}
+                  hoursConsumed={calcJobHoursConsumed(job, tasks)}
                   checklistComplete={isChecklistComplete(job)}
                   canEdit={canCreate}
-                  onToggleChecklist={handleToggleChecklist}
+                  onToggleStage={(key, checked) =>
+                    handleToggleStage(job.id, key, checked)
+                  }
                   onComplete={() => setJobToComplete(job)}
                   onEdit={() => {
                     setEditingJob(job);
@@ -470,16 +495,14 @@ export function JobsPage() {
       >
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>
-              Concluir e Registar Relatório
-            </DialogTitle>
+            <DialogTitle>Concluir e Registar Relatório</DialogTitle>
           </DialogHeader>
           {jobToComplete && (
             <CompletionForm
               job={jobToComplete}
               overdue={isOverdue(jobToComplete)}
               onClose={() => setJobToComplete(null)}
-              onSaved={loadAll}
+              onSaved={() => loadAll()}
             />
           )}
         </DialogContent>
@@ -516,9 +539,7 @@ function WorkMetric({
         <p className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
           {value}
         </p>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          {label}
-        </p>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
       </div>
     </div>
   );
@@ -527,8 +548,8 @@ function WorkMetric({
 function LoadingState() {
   return (
     <div className="flex min-h-48 items-center justify-center text-sm text-zinc-400">
-      <Loader2 className="mr-2 h-4 w-4 animate-spin" />A
-      carregar trabalhos…
+      <Loader2 className="mr-2 h-4 w-4 animate-spin" />A carregar
+      trabalhos…
     </div>
   );
 }
@@ -548,7 +569,7 @@ function ActiveJob({
   hoursConsumed,
   checklistComplete,
   canEdit,
-  onToggleChecklist,
+  onToggleStage,
   onComplete,
   onEdit,
   onDelete,
@@ -558,17 +579,15 @@ function ActiveJob({
   hoursConsumed: number;
   checklistComplete: boolean;
   canEdit: boolean;
-  onToggleChecklist: (itemId: string, checked: boolean) => void;
+  onToggleStage: (stageKey: string, checked: boolean) => void;
   onComplete: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const pastDate =
-    new Date(job.due_date).getTime() < Date.now();
-  const checkedCount = (job.checklist || []).filter(
-    (c: any) => c.checked,
-  ).length;
-  const totalCount = (job.checklist || []).length;
+  const pastDate = new Date(job.due_date).getTime() < Date.now();
+  const stages = getStages(job);
+  const checkedCount = stages.filter((s) => s.checked).length;
+  const totalCount = stages.length;
 
   return (
     <div className="p-5">
@@ -590,11 +609,15 @@ function ActiveJob({
               </p>
               <p className="mt-1 font-mono text-xs text-zinc-400">
                 {job.reference}
-                {job.tracking_code &&
-                  ` · Rastreio: ${job.tracking_code}`}
+                {job.tracking_code && ` · Rastreio: ${job.tracking_code}`}
               </p>
             </div>
             <div className="flex items-center gap-1.5">
+              {job.non_standard && (
+                <Badge className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400">
+                  Não tipo
+                </Badge>
+              )}
               <Badge
                 className={
                   overdue
@@ -638,9 +661,7 @@ function ActiveJob({
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400">
             <span
               className={
-                pastDate
-                  ? "font-medium text-red-600 dark:text-red-400"
-                  : ""
+                pastDate ? "font-medium text-red-600 dark:text-red-400" : ""
               }
             >
               Prazo: {formatDate(job.due_date)}
@@ -653,21 +674,18 @@ function ActiveJob({
                     : ""
                 }
               >
-                Horas: {hoursConsumed.toFixed(1)} /{" "}
-                {job.max_hours}h
+                Horas: {hoursConsumed.toFixed(1)} / {job.max_hours}h
               </span>
             )}
             {job.assignees?.length > 0 && (
               <span className="flex items-center gap-1">
                 <Users className="h-3 w-3" />
-                {job.assignees
-                  .map((a: any) => a.nome)
-                  .join(", ")}
+                {job.assignees.map((a: any) => a.nome).join(", ")}
               </span>
             )}
           </div>
 
-          {/* Checklist */}
+          {/* Fases */}
           <div className="mt-4 rounded-lg border border-zinc-100 p-3 dark:border-zinc-800">
             <div className="mb-2 flex items-center justify-between">
               <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
@@ -678,19 +696,16 @@ function ActiveJob({
               </span>
             </div>
             <div className="grid gap-1.5 sm:grid-cols-2">
-              {(job.checklist || []).map((item: any) => (
+              {stages.map((item) => (
                 <label
-                  key={item.id}
+                  key={item.key}
                   className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
                 >
                   <input
                     type="checkbox"
                     checked={item.checked}
                     onChange={(e) =>
-                      onToggleChecklist(
-                        item.id,
-                        e.target.checked,
-                      )
+                      onToggleStage(item.key, e.target.checked)
                     }
                     className="h-4 w-4 accent-red-600"
                   />
@@ -716,8 +731,7 @@ function ActiveJob({
           <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3 dark:border-zinc-800">
             {!checklistComplete && (
               <p className="text-[11px] text-zinc-400">
-                Marca todas as fases para poderes concluir o
-                trabalho.
+                Marca todas as fases para poderes concluir o trabalho.
               </p>
             )}
             <Button
@@ -756,6 +770,11 @@ function CompletedJob({ job }: { job: any }) {
         </p>
       </div>
       <div className="flex items-center gap-1.5">
+        {job.non_standard && (
+          <Badge className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400">
+            Não tipo
+          </Badge>
+        )}
         <Badge
           className={
             late
@@ -796,11 +815,13 @@ function JobForm({
     department: job?.department || "",
     description: job?.description || "",
     dueDate: localDateTimeInput(job?.due_date),
-    maxHours:
-      job?.max_hours != null ? String(job.max_hours) : "",
+    maxHours: job?.max_hours != null ? String(job.max_hours) : "",
   });
   const [assigneeIds, setAssigneeIds] = useState<string[]>(
     job?.assignees?.map((a: any) => a.id) || [],
+  );
+  const [nonStandard, setNonStandard] = useState<boolean>(
+    Boolean(job?.non_standard),
   );
 
   const update = (key: keyof typeof form, value: string) =>
@@ -824,10 +845,9 @@ function JobForm({
           department: form.department || undefined,
           description: form.description || undefined,
           dueDate: new Date(form.dueDate).toISOString(),
-          maxHours: form.maxHours
-            ? Number(form.maxHours)
-            : null,
+          maxHours: form.maxHours ? Number(form.maxHours) : null,
           assigneeIds,
+          nonStandard,
         });
       } else {
         await jobsAPI.create({
@@ -837,9 +857,8 @@ function JobForm({
           assigneeIds,
           description: form.description || undefined,
           dueDate: new Date(form.dueDate).toISOString(),
-          maxHours: form.maxHours
-            ? Number(form.maxHours)
-            : null,
+          maxHours: form.maxHours ? Number(form.maxHours) : null,
+          nonStandard,
         });
       }
       await onSaved();
@@ -856,15 +875,11 @@ function JobForm({
     <form className="mt-3 grid gap-4" onSubmit={submit}>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="reference">
-            Referência (opcional)
-          </Label>
+          <Label htmlFor="reference">Referência (opcional)</Label>
           <Input
             id="reference"
             value={form.reference}
-            onChange={(e) =>
-              update("reference", e.target.value)
-            }
+            onChange={(e) => update("reference", e.target.value)}
             placeholder="Gerada automaticamente"
             disabled={Boolean(job)}
           />
@@ -896,16 +911,12 @@ function JobForm({
           <Input
             id="department"
             value={form.department}
-            onChange={(e) =>
-              update("department", e.target.value)
-            }
+            onChange={(e) => update("department", e.target.value)}
             placeholder="Ex: Manutenção"
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="maxHours">
-            Limite de Horas (opcional)
-          </Label>
+          <Label htmlFor="maxHours">Limite de Horas (opcional)</Label>
           <Input
             id="maxHours"
             type="number"
@@ -917,6 +928,17 @@ function JobForm({
           />
         </div>
       </div>
+
+      <label className="flex cursor-pointer items-center gap-2 rounded-md border border-zinc-200 px-3 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">
+        <input
+          type="checkbox"
+          checked={nonStandard}
+          onChange={(e) => setNonStandard(e.target.checked)}
+          className="h-4 w-4 accent-red-600"
+        />
+        Trabalho não tipo
+      </label>
+
       <div className="space-y-2">
         <Label>Funcionários Atribuídos</Label>
         <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-zinc-200 p-2 dark:border-zinc-700">
@@ -942,7 +964,7 @@ function JobForm({
       {!job && (
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/50">
           <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
-            Checklist criado automaticamente
+            Fases (iguais para todos os trabalhos)
           </p>
           <ul className="mt-1.5 space-y-0.5 text-xs text-zinc-500 dark:text-zinc-400">
             {JOB_CHECKLIST_ITEMS.map((item) => (
@@ -956,18 +978,12 @@ function JobForm({
         <Textarea
           id="description"
           value={form.description}
-          onChange={(e) =>
-            update("description", e.target.value)
-          }
+          onChange={(e) => update("description", e.target.value)}
           placeholder="Descreva o trabalho a executar e as condições relevantes."
         />
       </div>
       <div className="mt-2 flex justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onClose}
-        >
+        <Button type="button" variant="outline" onClick={onClose}>
           Cancelar
         </Button>
         <Button
@@ -975,9 +991,7 @@ function JobForm({
           className="bg-red-600 hover:bg-red-700"
           disabled={loading}
         >
-          {loading && (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          )}
+          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {job ? "Guardar Alterações" : "Criar Trabalho"}
         </Button>
       </div>
@@ -1014,9 +1028,9 @@ function CompletionForm({
       await jobsAPI.complete(job.id, form);
       await onSaved();
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao concluir trabalho:", error);
-      alert("Erro ao concluir trabalho.");
+      alert(error?.message || "Erro ao concluir trabalho.");
     } finally {
       setLoading(false);
     }
@@ -1057,9 +1071,7 @@ function CompletionForm({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="wentWrong">
-          O que correu mal / constrangimentos
-        </Label>
+        <Label htmlFor="wentWrong">O que correu mal / constrangimentos</Label>
         <Textarea
           id="wentWrong"
           value={form.wentWrong}
@@ -1069,9 +1081,7 @@ function CompletionForm({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="conclusion">
-          Conclusão e Próximos Passos
-        </Label>
+        <Label htmlFor="conclusion">Conclusão e Próximos Passos</Label>
         <Textarea
           id="conclusion"
           value={form.conclusion}
@@ -1086,20 +1096,14 @@ function CompletionForm({
           <Textarea
             id="delayReason"
             value={form.delayReason}
-            onChange={(e) =>
-              update("delayReason", e.target.value)
-            }
+            onChange={(e) => update("delayReason", e.target.value)}
             required
             className="min-h-24"
           />
         </div>
       )}
       <div className="flex justify-end gap-2 pt-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onClose}
-        >
+        <Button type="button" variant="outline" onClick={onClose}>
           Cancelar
         </Button>
         <Button
@@ -1107,9 +1111,7 @@ function CompletionForm({
           disabled={loading}
           className="bg-red-600 hover:bg-red-700"
         >
-          {loading && (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          )}
+          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Guardar Relatório e Concluir
         </Button>
       </div>

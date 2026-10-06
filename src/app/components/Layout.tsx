@@ -108,7 +108,7 @@ export function Layout({
       roles: ["administrador", "escritorio"],
       items: [{ id: "vehicles", label: "Viaturas", icon: Car }],
     },
-   
+
     {
       id: "stock",
       label: "Stock e Movimentos",
@@ -128,7 +128,12 @@ export function Layout({
       label: "Trabalhos",
       icon: Hammer,
       section: "Operações",
-      roles: ["administrador", "projeto", "chefe_producao"],
+      roles: [
+        "administrador",
+        "escritorio",
+        "projeto",
+        "chefe_producao",
+      ],
       items: [
         {
           id: "jobs",

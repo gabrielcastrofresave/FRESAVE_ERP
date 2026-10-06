@@ -810,7 +810,10 @@ export const uploadProductionTaskImage = async (
 export const stockAPI = {
   // Retorna { data: StockItem[], total: number }
   // Usa range() do Supabase para paginação server-side
-  getItems: async (params?: { page?: number; limit?: number }) => {
+  getItems: async (params?: {
+    page?: number;
+    limit?: number;
+  }) => {
     const page = params?.page ?? 1;
     const limit = params?.limit ?? 1000;
     const from = (page - 1) * limit;
@@ -910,14 +913,19 @@ export const stockAPI = {
 };
 
 // ==================== JOBS API ====================
+// Substitui este bloco inteiro no src/app/api.ts
 export const JOB_CHECKLIST_ITEMS = [
-  { key: "pre_projeto", label: "Pré-projeto / Concepção" },
-  { key: "procurement", label: "Procurement" },
-  { key: "projecao", label: "Projeção" },
-  { key: "producao", label: "Produção" },
+  { key: "pre_projeto", label: "Pré-projeto" },
+  { key: "projeto", label: "Projeto" },
+  { key: "maquinagem", label: "Maquinagem" },
+  { key: "montagem", label: "Montagem" },
+  { key: "pintura", label: "Pintura" },
+  {
+    key: "eletricidade_automacao",
+    label: "Eletricidade/Automação",
+  },
   { key: "testagem", label: "Testagem" },
-  { key: "envio", label: "Envio" },
-];
+] as const;
 
 export const jobsAPI = {
   getAll: async () => {
@@ -933,18 +941,14 @@ export const jobsAPI = {
       .order("due_date", { ascending: true });
     if (error) throw error;
 
-    const order = JOB_CHECKLIST_ITEMS.map((i) => i.key);
-
     return (data || []).map((job: any) => ({
       ...job,
       assignees: (job.job_assignees || []).map((ja: any) => ({
         id: ja.user_id,
         nome: ja.users?.nome,
       })),
-      checklist: (job.job_checklist_items || []).sort(
-        (a: any, b: any) =>
-          order.indexOf(a.item_key) - order.indexOf(b.item_key),
-      ),
+      // linhas cruas; a ordem e os nomes vêm do JOB_CHECKLIST_ITEMS no frontend
+      checklist: job.job_checklist_items || [],
     }));
   },
 
@@ -956,6 +960,7 @@ export const jobsAPI = {
     description?: string;
     dueDate: string;
     maxHours?: number | null;
+    nonStandard?: boolean;
   }) => {
     const { data, error } = await supabase
       .from("jobs")
@@ -964,6 +969,7 @@ export const jobsAPI = {
           reference: job.reference || `JOB-${Date.now()}`,
           title: job.title,
           department: job.department || null,
+          non_standard: job.nonStandard ?? false,
           description: job.description || null,
           due_date: job.dueDate,
           max_hours: job.maxHours ?? null,
@@ -1011,6 +1017,7 @@ export const jobsAPI = {
       dueDate?: string;
       maxHours?: number | null;
       assigneeIds?: string[];
+      nonStandard?: boolean;
     },
   ) => {
     const payload: any = {};
@@ -1023,6 +1030,8 @@ export const jobsAPI = {
       payload.due_date = job.dueDate;
     if (job.maxHours !== undefined)
       payload.max_hours = job.maxHours;
+    if (job.nonStandard !== undefined)
+      payload.non_standard = job.nonStandard;
 
     if (Object.keys(payload).length > 0) {
       const { error } = await supabase
@@ -1052,20 +1061,41 @@ export const jobsAPI = {
     }
   },
 
-  // Marca/desmarca um item do checklist, gravando quando foi feito
-  toggleChecklistItem: async (
-    itemId: string,
+  deleteJob: async (jobId: string) => {
+    const { error } = await supabase
+      .from("jobs")
+      .delete()
+      .eq("id", jobId);
+    if (error) throw error;
+    return { success: true };
+  },
+
+  // Marca/desmarca uma fase, gravando quando e por quem
+  toggleStage: async (
+    jobId: string,
+    stageKey: string,
     checked: boolean,
     userId?: string,
   ) => {
+    const stage = JOB_CHECKLIST_ITEMS.find(
+      (s) => s.key === stageKey,
+    );
+    if (!stage)
+      throw new Error(`Fase desconhecida: ${stageKey}`);
+
     const { error } = await supabase
       .from("job_checklist_items")
-      .update({
-        checked,
-        checked_at: checked ? new Date().toISOString() : null,
-        checked_by: checked ? userId || null : null,
-      })
-      .eq("id", itemId);
+      .upsert(
+        {
+          job_id: jobId,
+          item_key: stageKey,
+          label: stage.label,
+          checked,
+          checked_at: checked ? new Date().toISOString() : null,
+          checked_by: checked ? (userId ?? null) : null,
+        },
+        { onConflict: "job_id,item_key" },
+      );
     if (error) throw error;
   },
 
@@ -1078,6 +1108,22 @@ export const jobsAPI = {
       delayReason?: string;
     },
   ) => {
+    // Confirma que todas as fases estão marcadas antes de concluir
+    const { data: rows, error: rowsError } = await supabase
+      .from("job_checklist_items")
+      .select("item_key, checked")
+      .eq("job_id", id);
+    if (rowsError) throw rowsError;
+
+    const done = new Set(
+      (rows ?? [])
+        .filter((r: any) => r.checked)
+        .map((r: any) => r.item_key),
+    );
+    if (!JOB_CHECKLIST_ITEMS.every((s) => done.has(s.key))) {
+      throw new Error("Há fases por concluir.");
+    }
+
     const { error } = await supabase
       .from("jobs")
       .update({

@@ -125,7 +125,171 @@ export function AccountingPage() {
     loadJobs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // Adiciona esta função helper no topo do arquivo
+  function DeleteProjectDialog({
+    job,
+    onClose,
+    onDeleted,
+  }: {
+    job: any;
+    onClose: () => void;
+    onDeleted: () => void;
+  }) {
+    const [step, setStep] = useState<"initial" | "verify">(
+      "initial",
+    );
+    const [verificationText, setVerificationText] =
+      useState("");
+    const [loading, setLoading] = useState(false);
 
+    const canDelete =
+      job.status === "concluido" || job.status === "deleted";
+
+    const verificationRequired = job.title || job.reference;
+
+    const handleFirstConfirm = () => {
+      setStep("verify");
+    };
+
+    const handleDelete = async () => {
+      if (verificationText !== verificationRequired) {
+        alert(`Por favor, escreve: ${verificationRequired}`);
+        return;
+      }
+
+      setLoading(true);
+      try {
+        await jobsAPI.deleteJob(job.id);
+        alert("Projeto eliminado com sucesso.");
+        onDeleted();
+        onClose();
+      } catch (error) {
+        console.error("Erro ao eliminar projeto:", error);
+        alert("Erro ao eliminar projeto.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (!canDelete) {
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+            <p className="text-sm text-amber-800 dark:text-amber-400">
+              Não é possível eliminar este projeto. Apenas
+              projetos concluídos podem ser eliminados.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="inline-flex items-center justify-center rounded-lg bg-zinc-200 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-300 dark:bg-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-600"
+          >
+            Fechar
+          </button>
+        </div>
+      );
+    }
+
+    if (step === "initial") {
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/30">
+            <p className="text-sm font-medium text-red-900 dark:text-red-200">
+              Aviso: Esta ação é irreversível
+            </p>
+            <p className="mt-1 text-sm text-red-800 dark:text-red-300">
+              Ao eliminar este projeto, todos os seus dados
+              (peças, horas, custos) serão removidos
+              permanentemente.
+            </p>
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium text-zinc-900 dark:text-zinc-50">
+              Tens a certeza que queres eliminar:
+            </p>
+            <p className="text-sm text-zinc-600 dark:text-zinc-300">
+              <strong>{job.title}</strong> ({job.reference})
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleFirstConfirm}
+              className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+            >
+              Sim, quero eliminar
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-red-300 bg-red-100 p-3 dark:border-red-800 dark:bg-red-950/50">
+          <p className="text-sm font-bold text-red-900 dark:text-red-200">
+            ⚠ Confirmação Final Necessária
+          </p>
+        </div>
+        <div>
+          <Label
+            htmlFor="verification"
+            className="text-sm font-medium"
+          >
+            Escreve o título ou referência do projeto para
+            confirmar:
+          </Label>
+          <p className="mt-1 inline-block rounded bg-zinc-100 px-2 py-1 font-mono text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+            {verificationRequired}
+          </p>
+        </div>
+        <Input
+          id="verification"
+          type="text"
+          value={verificationText}
+          onChange={(e) => setVerificationText(e.target.value)}
+          placeholder="Escreve aqui..."
+          autoFocus
+          className="border-red-300"
+        />
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          Texto introduzido:{" "}
+          <span className="font-mono">
+            {verificationText || "(vazio)"}
+          </span>
+        </p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => {
+              setStep("initial");
+              setVerificationText("");
+            }}
+            className="flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
+          >
+            Voltar
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={
+              loading ||
+              verificationText !== verificationRequired
+            }
+            className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading && (
+              <Loader2 className="mr-2 inline h-3.5 w-3.5 animate-spin" />
+            )}
+            {loading ? "A eliminar..." : "Eliminar para sempre"}
+          </button>
+        </div>
+      </div>
+    );
+  }
   const selectedJob = jobs.find(
     (j: any) => j.id === selectedJobId,
   );
@@ -216,6 +380,168 @@ export function AccountingPage() {
           </div>
         )}
       </section>
+    </div>
+  );
+}
+function DeleteProjectDialog({
+  job,
+  onClose,
+  onDeleted,
+}: {
+  job: any;
+  onClose: () => void;
+  onDeleted: () => void;
+}) {
+  const [step, setStep] = useState<"initial" | "verify">(
+    "initial",
+  );
+  const [verificationText, setVerificationText] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const canDelete =
+    job.status === "concluido" || job.status === "deleted";
+
+  const verificationRequired = job.title || job.reference;
+
+  const handleFirstConfirm = () => {
+    setStep("verify");
+  };
+
+  const handleDelete = async () => {
+    if (verificationText !== verificationRequired) {
+      alert(`Por favor, escreve: ${verificationRequired}`);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await jobsAPI.deleteJob(job.id);
+      alert("Projeto eliminado com sucesso.");
+      onDeleted();
+      onClose();
+    } catch (error) {
+      console.error("Erro ao eliminar projeto:", error);
+      alert("Erro ao eliminar projeto.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!canDelete) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+          <p className="text-sm text-amber-800 dark:text-amber-400">
+            Não é possível eliminar este projeto. Apenas
+            projetos concluídos podem ser eliminados.
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="inline-flex items-center justify-center rounded-lg bg-zinc-200 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-300 dark:bg-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-600"
+        >
+          Fechar
+        </button>
+      </div>
+    );
+  }
+
+  if (step === "initial") {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/30">
+          <p className="text-sm font-medium text-red-900 dark:text-red-200">
+            Aviso: Esta ação é irreversível
+          </p>
+          <p className="mt-1 text-sm text-red-800 dark:text-red-300">
+            Ao eliminar este projeto, todos os seus dados
+            (peças, horas, custos) serão removidos
+            permanentemente.
+          </p>
+        </div>
+        <div>
+          <p className="mb-2 text-sm font-medium text-zinc-900 dark:text-zinc-50">
+            Tens a certeza que queres eliminar:
+          </p>
+          <p className="text-sm text-zinc-600 dark:text-zinc-300">
+            <strong>{job.title}</strong> ({job.reference})
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleFirstConfirm}
+            className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+          >
+            Sim, quero eliminar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-red-300 bg-red-100 p-3 dark:border-red-800 dark:bg-red-950/50">
+        <p className="text-sm font-bold text-red-900 dark:text-red-200">
+          ⚠ Confirmação Final Necessária
+        </p>
+      </div>
+      <div>
+        <Label
+          htmlFor="verification"
+          className="text-sm font-medium"
+        >
+          Escreve o título ou referência do projeto para
+          confirmar:
+        </Label>
+        <p className="mt-1 inline-block rounded bg-zinc-100 px-2 py-1 font-mono text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+          {verificationRequired}
+        </p>
+      </div>
+      <Input
+        id="verification"
+        type="text"
+        value={verificationText}
+        onChange={(e) => setVerificationText(e.target.value)}
+        placeholder="Escreve aqui..."
+        autoFocus
+        className="border-red-300"
+      />
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        Texto introduzido:{" "}
+        <span className="font-mono">
+          {verificationText || "(vazio)"}
+        </span>
+      </p>
+      <div className="flex gap-2">
+        <button
+          onClick={() => {
+            setStep("initial");
+            setVerificationText("");
+          }}
+          className="flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
+        >
+          Voltar
+        </button>
+        <button
+          onClick={handleDelete}
+          disabled={
+            loading || verificationText !== verificationRequired
+          }
+          className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {loading && (
+            <Loader2 className="mr-2 inline h-3.5 w-3.5 animate-spin" />
+          )}
+          {loading ? "A eliminar..." : "Eliminar para sempre"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -518,6 +844,33 @@ function JobCostSheet({
               <FileText className="mr-2 h-4 w-4" />
               Word
             </Button>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="h-9 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Eliminar
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="text-red-600">
+                    Eliminar Projeto
+                  </DialogTitle>
+                </DialogHeader>
+                <DeleteProjectDialog
+                  job={job}
+                  onClose={() => {
+                    /* fecha dialog */
+                  }}
+                  onDeleted={() => {
+                    /* recarrega lista */
+                  }}
+                />
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
         <div className="flex items-center justify-between bg-zinc-900 px-5 py-4">
