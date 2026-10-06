@@ -24,6 +24,8 @@ import {
   ShieldAlert,
   Users,
   Trash2,
+  Search,
+  X,
 } from "lucide-react";
 
 type ViewMode = "dia" | "semana" | "mes";
@@ -55,6 +57,7 @@ const STATUS_LABELS: Record<string, string> = {
 function toDateInput(date: Date) {
   return date.toISOString().split("T")[0];
 }
+
 function isSameDay(a: Date, b: Date) {
   return (
     a.getFullYear() === b.getFullYear() &&
@@ -62,6 +65,7 @@ function isSameDay(a: Date, b: Date) {
     a.getDate() === b.getDate()
   );
 }
+
 function startOfWeekMonday(date: Date) {
   const d = new Date(date);
   const day = d.getDay();
@@ -70,19 +74,19 @@ function startOfWeekMonday(date: Date) {
   d.setHours(0, 0, 0, 0);
   return d;
 }
+
 function addDays(date: Date, n: number) {
   const d = new Date(date);
   d.setDate(d.getDate() + n);
   return d;
 }
+
 function isPastDay(dateStr: string) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return new Date(dateStr) < today;
 }
 
-// Calcula o "status efetivo" a mostrar: se o dia já passou e não foi
-// marcado como concluído, mostra "Não Fez" mesmo que na BD ainda diga "pendente"
 function effectiveStatus(row: any) {
   if (row.status === "concluido") return "concluido";
   if (isPastDay(row.data)) return "nao_fez";
@@ -218,7 +222,7 @@ export function ProductionCalendarPage() {
               Novo Registo
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">
             <DialogHeader>
               <DialogTitle>Novo Registo</DialogTitle>
               <DialogDescription>
@@ -417,11 +421,6 @@ function TaskPill({
       <p className="mt-1 truncate text-[11px] font-medium text-zinc-700 dark:text-zinc-300">
         {row.users?.nome}
       </p>
-      {row.cliente_obra && (
-        <p className="mt-0.5 truncate text-[11px] text-zinc-500 dark:text-zinc-400">
-          {row.cliente_obra}
-        </p>
-      )}
       <div className="mt-2 flex items-center justify-between gap-2 text-[10px]">
         <span className="text-zinc-500 dark:text-zinc-400">
           {row.hora_inicio && row.hora_fim
@@ -535,50 +534,24 @@ function TaskForm({
   onSaved: () => Promise<void>;
 }) {
   const [loading, setLoading] = useState(false);
-  const [tipo, setTipo] = useState<"producao" | "manutencao">(
-    "producao",
-  );
   const [jobId, setJobId] = useState("");
-  const [titulo, setTitulo] = useState("");
-  const [clienteObra, setClienteObra] = useState("");
-  const [local, setLocal] = useState("");
   const [data, setData] = useState(toDateInput(new Date()));
-  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
-
-  const toggleAssignee = (id: string) => {
-    setAssigneeIds((current) =>
-      current.includes(id)
-        ? current.filter((a) => a !== id)
-        : [...current, id],
-    );
-  };
+  const [descricao, setDescricao] = useState("");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (assigneeIds.length === 0) {
-      alert("Seleciona pelo menos um utilizador.");
-      return;
-    }
-    if (tipo === "producao" && !jobId) {
+    if (!jobId) {
       alert("Seleciona o projeto (trabalho).");
-      return;
-    }
-    if (tipo === "manutencao" && !titulo.trim()) {
-      alert("Escreve o que vai ser feito.");
       return;
     }
 
     setLoading(true);
     try {
       await productionTasksAPI.create({
-        tipo,
-        jobId: tipo === "producao" ? jobId : null,
-        titulo: tipo === "manutencao" ? titulo : undefined,
-        clienteObra,
-        local,
+        jobId,
         data,
+        descricao: descricao.trim() || null,
         createdBy: currentUser?.id,
-        assigneeIds,
       });
       await onSaved();
       onClose();
@@ -593,81 +566,12 @@ function TaskForm({
   return (
     <form className="mt-3 grid gap-4" onSubmit={submit}>
       <div className="space-y-2">
-        <Label>Tipo de Registo *</Label>
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            onClick={() => setTipo("producao")}
-            className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-              tipo === "producao"
-                ? "border-red-600 bg-red-600 text-white"
-                : "border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            }`}
-          >
-            Produção
-          </button>
-          <button
-            type="button"
-            onClick={() => setTipo("manutencao")}
-            className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
-              tipo === "manutencao"
-                ? "border-red-600 bg-red-600 text-white"
-                : "border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-            }`}
-          >
-            Assistência
-          </button>
-        </div>
-      </div>
-
-      {tipo === "producao" ? (
-        <div className="space-y-2">
-          <Label htmlFor="jobId">Projeto (Trabalho) *</Label>
-          <select
-            id="jobId"
-            value={jobId}
-            onChange={(e) => setJobId(e.target.value)}
-            required
-            className="h-9 w-full rounded-md border border-zinc-200 bg-transparent px-3 text-sm dark:border-zinc-700"
-          >
-            <option value="">Selecionar projeto...</option>
-            {jobs.map((j: any) => (
-              <option key={j.id} value={j.id}>
-                {j.title}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <Label htmlFor="titulo">O Que Vai Ser Feito *</Label>
-          <Input
-            id="titulo"
-            value={titulo}
-            onChange={(e) => setTitulo(e.target.value)}
-            placeholder="Ex: Manutenção da prensa 2"
-            required
-          />
-        </div>
-      )}
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="clienteObra">Cliente / Obra</Label>
-          <Input
-            id="clienteObra"
-            value={clienteObra}
-            onChange={(e) => setClienteObra(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="local">Local</Label>
-          <Input
-            id="local"
-            value={local}
-            onChange={(e) => setLocal(e.target.value)}
-          />
-        </div>
+        <Label>Projeto (Trabalho) *</Label>
+        <JobPicker
+          jobs={jobs}
+          value={jobId}
+          onChange={setJobId}
+        />
       </div>
 
       <div className="space-y-2">
@@ -680,29 +584,16 @@ function TaskForm({
           required
         />
       </div>
-
       <div className="space-y-2">
-        <Label>Utilizadores Atribuídos *</Label>
-        <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-zinc-200 p-2 dark:border-zinc-700">
-          {users.map((u: any) => (
-            <label
-              key={u.id}
-              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
-            >
-              <input
-                type="checkbox"
-                checked={assigneeIds.includes(u.id)}
-                onChange={() => toggleAssignee(u.id)}
-                className="h-4 w-4"
-              />
-              {u.nome}
-            </label>
-          ))}
-        </div>
-        <p className="text-xs text-zinc-400">
-          {assigneeIds.length} utilizador(es) selecionado(s) —
-          cada um regista as suas próprias horas.
-        </p>
+        <Label htmlFor="descricao">Descrição</Label>
+        <textarea
+          id="descricao"
+          value={descricao}
+          onChange={(e) => setDescricao(e.target.value)}
+          rows={4}
+          placeholder="Notas ou instruções para este dia..."
+          className="w-full resize-y rounded-md border border-zinc-200 bg-transparent px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-600/30 dark:border-zinc-700"
+        />
       </div>
 
       <DialogFooter className="mt-2">
@@ -725,5 +616,119 @@ function TaskForm({
         </Button>
       </DialogFooter>
     </form>
+  );
+}
+
+function normalize(s: string) {
+  return (s || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function JobPicker({
+  jobs,
+  value,
+  onChange,
+}: {
+  jobs: any[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [highlight, setHighlight] = useState(0);
+
+  const selected = jobs.find((j: any) => j.id === value);
+
+  const results = useMemo(() => {
+    const q = normalize(query.trim());
+    const list = q
+      ? jobs.filter((j: any) => normalize(j.title).includes(q))
+      : jobs;
+    return list.slice(0, 50);
+  }, [jobs, query]);
+
+  useEffect(() => {
+    setHighlight(0);
+  }, [query]);
+
+  function select(job: any) {
+    onChange(job.id);
+    setQuery("");
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlight((h) => Math.min(h + 1, results.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight((h) => Math.max(h - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (results[highlight]) select(results[highlight]);
+    }
+  }
+
+  if (selected) {
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800">
+        <span className="min-w-0 truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
+          {selected.title}
+        </span>
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="flex shrink-0 items-center gap-1 text-xs text-red-600 hover:underline"
+        >
+          <X className="h-3 w-3" />
+          Alterar
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-md border border-zinc-200 dark:border-zinc-700">
+      <div className="flex items-center gap-2 border-b border-zinc-100 px-3 dark:border-zinc-800">
+        <Search className="h-4 w-4 shrink-0 text-zinc-400" />
+        <input
+          autoFocus
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder={`Pesquisar entre ${jobs.length} projetos...`}
+          className="h-9 w-full bg-transparent text-sm outline-none placeholder:text-zinc-400"
+        />
+      </div>
+      <div className="max-h-60 overflow-y-auto p-1">
+        {results.length === 0 ? (
+          <p className="px-3 py-6 text-center text-sm text-zinc-400">
+            Nenhum projeto encontrado.
+          </p>
+        ) : (
+          results.map((j: any, i: number) => (
+            <button
+              type="button"
+              key={j.id}
+              onClick={() => select(j)}
+              onMouseEnter={() => setHighlight(i)}
+              className={`block w-full truncate rounded px-3 py-2 text-left text-sm ${
+                i === highlight
+                  ? "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300"
+                  : "text-zinc-700 dark:text-zinc-300"
+              }`}
+            >
+              {j.title}
+            </button>
+          ))
+        )}
+        {!query && jobs.length > 50 && (
+          <p className="px-3 py-2 text-center text-[11px] text-zinc-400">
+            A mostrar 50 de {jobs.length}. Escreve para filtrar.
+          </p>
+        )}
+      </div>
+    </div>
   );
 }

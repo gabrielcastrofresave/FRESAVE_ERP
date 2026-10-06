@@ -6,7 +6,8 @@ import {
   jobsAPI,
   productionTasksAPI,
   calcJobHoursConsumed,
-  JOB_CHECKLIST_ITEMS,
+  CHECKLIST_LABELS,
+  DEPARTMENT_CHECKLIST_MAP,
   type JobFilters,
   type JobStatusFilter,
 } from "../api";
@@ -43,7 +44,22 @@ import {
 
 const PAGE_SIZE = 10;
 
-const STATUS_OPTIONS: { value: JobStatusFilter; label: string }[] = [
+export const DEPARTMENTS = [
+  "FÁBRICA",
+  "OFICINA",
+  "LOJA",
+  "MAQUINAÇÃO",
+  "ASSISTÊNCIA",
+] as const;
+export type Department = (typeof DEPARTMENTS)[number];
+
+// Vêm do api.ts; reexportados para outras páginas que os importem daqui
+export { CHECKLIST_LABELS, DEPARTMENT_CHECKLIST_MAP };
+
+const STATUS_OPTIONS: {
+  value: JobStatusFilter;
+  label: string;
+}[] = [
   { value: "em_curso", label: "Em curso" },
   { value: "atrasados", label: "Fora do prazo" },
   { value: "concluido", label: "Concluídos" },
@@ -93,7 +109,6 @@ const localDateTimeInput = (existing?: string) => {
     .slice(0, 16);
 };
 
-// Fases fixas (iguais para todos os trabalhos) + progresso guardado na BD
 type Stage = {
   key: string;
   label: string;
@@ -101,18 +116,33 @@ type Stage = {
   checked_at: string | null;
 };
 
-const getStages = (job: any): Stage[] =>
-  JOB_CHECKLIST_ITEMS.map((stage) => {
+const getStages = (job: any): Stage[] => {
+  // Se não tem departamento ou assistência, retorna vazio
+  if (!job?.department || job.department === "ASSISTÊNCIA") {
+    return [];
+  }
+
+  const checklistKeys =
+    DEPARTMENT_CHECKLIST_MAP[job.department];
+
+  // Se não encontra o departamento, retorna vazio
+  if (!checklistKeys) {
+    return [];
+  }
+
+  // Mapeia as fases
+  return checklistKeys.map((key) => {
     const row = (job.checklist || []).find(
-      (c: any) => c.item_key === stage.key,
+      (c: any) => c.item_key === key,
     );
     return {
-      key: stage.key,
-      label: stage.label,
+      key,
+      label: CHECKLIST_LABELS[key] || key,
       checked: Boolean(row?.checked),
       checked_at: row?.checked_at ?? null,
     };
   });
+};
 
 function downloadReportDoc(job: any) {
   const checklistRows = getStages(job)
@@ -202,12 +232,6 @@ function downloadReportDoc(job: any) {
           <tr><td class="meta-label">Funcionários</td><td class="meta-value">${(job.assignees || []).map((a: any) => a.nome).join(", ") || "-"}</td></tr>
         </table>
 
-        ${
-          job.description
-            ? `<h2>Descrição / Âmbito</h2><p class="section-text">${job.description}</p>`
-            : ""
-        }
-
         <h2>Fases do Projeto</h2>
         <table class="checklist">
           <tr><th>Fase</th><th>Concluída em</th></tr>
@@ -254,17 +278,27 @@ export function JobsPage() {
   const { users, currentUser } = useApp();
   const [jobs, setJobs] = useState<any[]>([]);
   const [total, setTotal] = useState(0);
-  const [counts, setCounts] = useState({ active: 0, overdue: 0, completed: 0 });
+  const [counts, setCounts] = useState({
+    active: 0,
+    overdue: 0,
+    completed: 0,
+  });
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [searchInput, setSearchInput] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [editingJob, setEditingJob] = useState<any | null>(null);
-  const [jobToComplete, setJobToComplete] = useState<any | null>(null);
+  const [editingJob, setEditingJob] = useState<any | null>(
+    null,
+  );
+  const [jobToComplete, setJobToComplete] = useState<
+    any | null
+  >(null);
   const requestId = useRef(0);
-
+  const [jobToDelete, setJobToDelete] = useState<any | null>(
+    null,
+  );
   const canCreate =
     currentUser?.role === "administrador" ||
     currentUser?.role === "projeto" ||
@@ -276,7 +310,6 @@ export function JobsPage() {
     filters.tipo !== "todos" ||
     filters.assigneeId !== "";
 
-  // As tarefas de produção só servem para as horas consumidas; carregam uma vez
   const loadTasks = async () => {
     try {
       setTasks(await productionTasksAPI.getAll());
@@ -285,7 +318,6 @@ export function JobsPage() {
     }
   };
 
-  // silent = recarrega sem mostrar o spinner (usado depois de marcar fases)
   const loadPage = async (silent = false) => {
     const id = ++requestId.current;
     if (!silent) setLoading(true);
@@ -296,14 +328,18 @@ export function JobsPage() {
           search: filters.search || undefined,
           tipo: filters.tipo,
           assigneeId: filters.assigneeId || undefined,
+          // ✅ IMPORTANTE: Filtra eliminados
+          excludeDeleted: true,
         }),
         jobsAPI.getCounts(),
       ]);
-      // Ignora respostas antigas (ex.: escreveste mais letras na pesquisa entretanto)
+
       if (id !== requestId.current) return;
 
-      // Se a página ficou vazia (ex.: apagaste o último da página), recua uma
-      const lastPage = Math.max(1, Math.ceil(pageData.total / PAGE_SIZE));
+      const lastPage = Math.max(
+        1,
+        Math.ceil(pageData.total / PAGE_SIZE),
+      );
       if (page > lastPage) {
         setPage(lastPage);
         return;
@@ -315,7 +351,8 @@ export function JobsPage() {
     } catch (error) {
       console.error("Erro ao carregar trabalhos:", error);
     } finally {
-      if (id === requestId.current && !silent) setLoading(false);
+      if (id === requestId.current && !silent)
+        setLoading(false);
     }
   };
 
@@ -327,7 +364,6 @@ export function JobsPage() {
     loadPage();
   }, [page, filters]);
 
-  // Pesquisa só dispara 300 ms depois de parares de escrever
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchInput.trim() !== filters.search) {
@@ -337,20 +373,26 @@ export function JobsPage() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  const changeFilter = (patch: Partial<typeof DEFAULT_FILTERS>) => {
+  const changeFilter = (
+    patch: Partial<typeof DEFAULT_FILTERS>,
+  ) => {
     setFilters((current) => ({ ...current, ...patch }));
     setPage(1);
   };
 
   const clearFilters = () => {
     setSearchInput("");
-    setFilters((current) => ({ ...DEFAULT_FILTERS, status: current.status }));
+    setFilters((current) => ({
+      ...DEFAULT_FILTERS,
+      status: current.status,
+    }));
     setPage(1);
   };
 
   const isOverdue = (job: any) => {
     if (job.status !== "em_curso") return false;
-    const pastDueDate = new Date(job.due_date).getTime() < Date.now();
+    const pastDueDate =
+      new Date(job.due_date).getTime() < Date.now();
     if (pastDueDate) return true;
     if (job.max_hours) {
       const consumed = calcJobHoursConsumed(job, tasks);
@@ -359,34 +401,51 @@ export function JobsPage() {
     return false;
   };
 
-  const isChecklistComplete = (job: any) =>
-    getStages(job).every((s) => s.checked);
+  const isChecklistComplete = (job: any) => {
+    const stages = getStages(job);
+    // Se não tem fases (assistência), considera completo
+    if (stages.length === 0) return true;
+    return stages.every((s) => s.checked);
+  };
 
   const handleToggleStage = async (
     jobId: string,
     stageKey: string,
     checked: boolean,
   ) => {
-    // Atualiza logo no ecrã, sem esperar pela base de dados
     const checkedAt = checked ? new Date().toISOString() : null;
     setJobs((current) =>
       current.map((job) => {
         if (job.id !== jobId) return job;
         const rows = job.checklist || [];
-        const exists = rows.some((r: any) => r.item_key === stageKey);
+        const exists = rows.some(
+          (r: any) => r.item_key === stageKey,
+        );
         const checklist = exists
           ? rows.map((r: any) =>
               r.item_key === stageKey
                 ? { ...r, checked, checked_at: checkedAt }
                 : r,
             )
-          : [...rows, { item_key: stageKey, checked, checked_at: checkedAt }];
+          : [
+              ...rows,
+              {
+                item_key: stageKey,
+                checked,
+                checked_at: checkedAt,
+              },
+            ];
         return { ...job, checklist };
       }),
     );
 
     try {
-      await jobsAPI.toggleStage(jobId, stageKey, checked, currentUser?.id);
+      await jobsAPI.toggleStage(
+        jobId,
+        stageKey,
+        checked,
+        currentUser?.id,
+      );
     } catch (error) {
       console.error("Erro ao atualizar fase:", error);
       alert("Erro ao atualizar fase.");
@@ -396,8 +455,9 @@ export function JobsPage() {
   };
 
   const handleDeleteJob = async (id: string) => {
-    if (confirm("Eliminar este trabalho? Esta ação não pode ser desfeita.")) {
+    if (confirm("Eliminar este trabalho?")) {
       try {
+        // O trigger na Supabase transforma isto em soft delete
         await jobsAPI.delete(id);
         await loadPage();
       } catch (error) {
@@ -407,7 +467,8 @@ export function JobsPage() {
     }
   };
 
-  const firstShown = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const firstShown =
+    total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const lastShown = Math.min(page * PAGE_SIZE, total);
 
   return (
@@ -421,9 +482,10 @@ export function JobsPage() {
             Trabalhos e Relatórios
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-            Cada trabalho tem um prazo, as mesmas fases de produção e,
-            opcionalmente, um limite de horas. Só é possível concluir
-            depois de todas as fases estarem marcadas.
+            Cada trabalho tem um prazo, as mesmas fases de
+            produção e, opcionalmente, um limite de horas. Só é
+            possível concluir depois de todas as fases estarem
+            marcadas.
           </p>
         </div>
         {canCreate && (
@@ -446,7 +508,9 @@ export function JobsPage() {
             <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
               <DialogHeader>
                 <DialogTitle>
-                  {editingJob ? "Editar Trabalho" : "Criar Trabalho"}
+                  {editingJob
+                    ? "Editar Trabalho"
+                    : "Criar Trabalho"}
                 </DialogTitle>
               </DialogHeader>
               <JobForm
@@ -463,7 +527,6 @@ export function JobsPage() {
         )}
       </header>
 
-      {/* Os cartões também funcionam como atalho para o filtro de estado */}
       <section className="grid gap-4 sm:grid-cols-3">
         <WorkMetric
           label="Em Execução"
@@ -492,14 +555,15 @@ export function JobsPage() {
       </section>
 
       <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        {/* Filtros */}
         <div className="space-y-3 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
           <div className="flex flex-wrap gap-1.5">
             {STATUS_OPTIONS.map((option) => (
               <button
                 key={option.value}
                 type="button"
-                onClick={() => changeFilter({ status: option.value })}
+                onClick={() =>
+                  changeFilter({ status: option.value })
+                }
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   filters.status === option.value
                     ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
@@ -524,17 +588,23 @@ export function JobsPage() {
             <select
               value={filters.tipo}
               onChange={(e) =>
-                changeFilter({ tipo: e.target.value as typeof filters.tipo })
+                changeFilter({
+                  tipo: e.target.value as typeof filters.tipo,
+                })
               }
               className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
             >
               <option value="todos">Tipo e não tipo</option>
               <option value="tipo">Só trabalhos tipo</option>
-              <option value="nao_tipo">Só trabalhos não tipo</option>
+              <option value="nao_tipo">
+                Só trabalhos não tipo
+              </option>
             </select>
             <select
               value={filters.assigneeId}
-              onChange={(e) => changeFilter({ assigneeId: e.target.value })}
+              onChange={(e) =>
+                changeFilter({ assigneeId: e.target.value })
+              }
               className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
             >
               <option value="">Todos os funcionários</option>
@@ -558,7 +628,6 @@ export function JobsPage() {
           </div>
         </div>
 
-        {/* Lista */}
         {loading ? (
           <LoadingState />
         ) : jobs.length ? (
@@ -571,7 +640,10 @@ export function JobsPage() {
                   key={job.id}
                   job={job}
                   overdue={isOverdue(job)}
-                  hoursConsumed={calcJobHoursConsumed(job, tasks)}
+                  hoursConsumed={calcJobHoursConsumed(
+                    job,
+                    tasks,
+                  )}
                   checklistComplete={isChecklistComplete(job)}
                   canEdit={canCreate}
                   onToggleStage={(key, checked) =>
@@ -582,7 +654,7 @@ export function JobsPage() {
                     setEditingJob(job);
                     setCreateOpen(true);
                   }}
-                  onDelete={() => handleDeleteJob(job.id)}
+                  onDelete={() => setJobToDelete(job)}
                 />
               ),
             )}
@@ -597,7 +669,6 @@ export function JobsPage() {
           />
         )}
 
-        {/* Paginação */}
         {total > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 px-5 py-3 dark:border-zinc-800">
             <p className="text-xs text-zinc-500 dark:text-zinc-400">
@@ -635,19 +706,18 @@ export function JobsPage() {
       </section>
 
       <Dialog
-        open={Boolean(jobToComplete)}
-        onOpenChange={(open) => !open && setJobToComplete(null)}
+        open={Boolean(jobToDelete)}
+        onOpenChange={(open) => !open && setJobToDelete(null)}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Concluir e Registar Relatório</DialogTitle>
+            <DialogTitle>Eliminar Trabalho</DialogTitle>
           </DialogHeader>
-          {jobToComplete && (
-            <CompletionForm
-              job={jobToComplete}
-              overdue={isOverdue(jobToComplete)}
-              onClose={() => setJobToComplete(null)}
-              onSaved={() => loadPage()}
+          {jobToDelete && (
+            <DeleteJobForm
+              job={jobToDelete}
+              onClose={() => setJobToDelete(null)}
+              onDeleted={() => loadPage()}
             />
           )}
         </DialogContent>
@@ -696,7 +766,9 @@ function WorkMetric({
         <p className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
           {value}
         </p>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          {label}
+        </p>
       </div>
     </button>
   );
@@ -705,8 +777,8 @@ function WorkMetric({
 function LoadingState() {
   return (
     <div className="flex min-h-48 items-center justify-center text-sm text-zinc-400">
-      <Loader2 className="mr-2 h-4 w-4 animate-spin" />A carregar
-      trabalhos…
+      <Loader2 className="mr-2 h-4 w-4 animate-spin" />A
+      carregar trabalhos…
     </div>
   );
 }
@@ -741,10 +813,15 @@ function ActiveJob({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const pastDate = new Date(job.due_date).getTime() < Date.now();
+  const pastDate =
+    new Date(job.due_date).getTime() < Date.now();
   const stages = getStages(job);
   const checkedCount = stages.filter((s) => s.checked).length;
   const totalCount = stages.length;
+
+  const hasNoChecklist =
+    DEPARTMENT_CHECKLIST_MAP[job.department as Department] ===
+    null;
 
   return (
     <div className="p-5">
@@ -766,15 +843,14 @@ function ActiveJob({
               </p>
               <p className="mt-1 font-mono text-xs text-zinc-400">
                 {job.reference}
-                {job.tracking_code && ` · Rastreio: ${job.tracking_code}`}
+                {job.tracking_code &&
+                  ` · Rastreio: ${job.tracking_code}`}
               </p>
             </div>
             <div className="flex items-center gap-1.5">
-              {job.non_standard && (
-                <Badge className="border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400">
-                  Não tipo
-                </Badge>
-              )}
+              <Badge className="border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                {job.department}
+              </Badge>
               <Badge
                 className={
                   overdue
@@ -810,15 +886,12 @@ function ActiveJob({
               )}
             </div>
           </div>
-          {job.description && (
-            <p className="mt-3 line-clamp-2 text-sm leading-5 text-zinc-500 dark:text-zinc-400">
-              {job.description}
-            </p>
-          )}
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400">
             <span
               className={
-                pastDate ? "font-medium text-red-600 dark:text-red-400" : ""
+                pastDate
+                  ? "font-medium text-red-600 dark:text-red-400"
+                  : ""
               }
             >
               Prazo: {formatDate(job.due_date)}
@@ -831,71 +904,79 @@ function ActiveJob({
                     : ""
                 }
               >
-                Horas: {hoursConsumed.toFixed(1)} / {job.max_hours}h
+                Horas: {hoursConsumed.toFixed(1)} /{" "}
+                {job.max_hours}h
               </span>
             )}
             {job.assignees?.length > 0 && (
               <span className="flex items-center gap-1">
                 <Users className="h-3 w-3" />
-                {job.assignees.map((a: any) => a.nome).join(", ")}
+                {job.assignees
+                  .map((a: any) => a.nome)
+                  .join(", ")}
               </span>
             )}
           </div>
 
-          {/* Fases */}
-          <div className="mt-4 rounded-lg border border-zinc-100 p-3 dark:border-zinc-800">
-            <div className="mb-2 flex items-center justify-between">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
-                Fases do Projeto
-              </p>
-              <span className="text-[11px] text-zinc-400">
-                {checkedCount}/{totalCount}
-              </span>
-            </div>
-            <div className="grid gap-1.5 sm:grid-cols-2">
-              {stages.map((item) => (
-                <label
-                  key={item.key}
-                  className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
-                >
-                  <input
-                    type="checkbox"
-                    checked={item.checked}
-                    onChange={(e) =>
-                      onToggleStage(item.key, e.target.checked)
-                    }
-                    className="h-4 w-4 accent-red-600"
-                  />
-                  <span
-                    className={
-                      item.checked
-                        ? "text-zinc-500 line-through dark:text-zinc-500"
-                        : "text-zinc-700 dark:text-zinc-300"
-                    }
+          {!hasNoChecklist && (
+            <div className="mt-4 rounded-lg border border-zinc-100 p-3 dark:border-zinc-800">
+              <div className="mb-2 flex items-center justify-between">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
+                  Fases do Projeto
+                </p>
+                <span className="text-[11px] text-zinc-400">
+                  {checkedCount}/{totalCount}
+                </span>
+              </div>
+              <div className="grid gap-1.5 sm:grid-cols-2">
+                {stages.map((item) => (
+                  <label
+                    key={item.key}
+                    className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
                   >
-                    {item.label}
-                  </span>
-                  {item.checked && item.checked_at && (
-                    <span className="ml-auto text-[10px] text-zinc-400">
-                      {formatDateShort(item.checked_at)}
+                    <input
+                      type="checkbox"
+                      checked={item.checked}
+                      onChange={(e) =>
+                        onToggleStage(
+                          item.key,
+                          e.target.checked,
+                        )
+                      }
+                      className="h-4 w-4 accent-red-600"
+                    />
+                    <span
+                      className={
+                        item.checked
+                          ? "text-zinc-500 line-through dark:text-zinc-500"
+                          : "text-zinc-700 dark:text-zinc-300"
+                      }
+                    >
+                      {item.label}
                     </span>
-                  )}
-                </label>
-              ))}
+                    {item.checked && item.checked_at && (
+                      <span className="ml-auto text-[10px] text-zinc-400">
+                        {formatDateShort(item.checked_at)}
+                      </span>
+                    )}
+                  </label>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="mt-4 flex items-center justify-between border-t border-zinc-100 pt-3 dark:border-zinc-800">
-            {!checklistComplete && (
+            {!hasNoChecklist && !checklistComplete && (
               <p className="text-[11px] text-zinc-400">
-                Marca todas as fases para poderes concluir o trabalho.
+                Marca todas as fases para poderes concluir o
+                trabalho.
               </p>
             )}
             <Button
               size="sm"
               className="ml-auto h-8 bg-red-600 text-xs text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
               onClick={onComplete}
-              disabled={!checklistComplete}
+              disabled={!hasNoChecklist && !checklistComplete}
             >
               <Check className="mr-1.5 h-3.5 w-3.5" />
               Concluir
@@ -966,31 +1047,23 @@ function JobForm({
   onSaved: () => Promise<void>;
 }) {
   const [loading, setLoading] = useState(false);
+  const [selectedDept, setSelectedDept] = useState<string>(
+    job?.department || "FÁBRICA",
+  );
   const [form, setForm] = useState({
     reference: job?.reference || "",
     title: job?.title || "",
-    department: job?.department || "",
-    description: job?.description || "",
     dueDate: localDateTimeInput(job?.due_date),
-    maxHours: job?.max_hours != null ? String(job.max_hours) : "",
+    maxHours:
+      job?.max_hours != null ? String(job.max_hours) : "",
   });
-  const [assigneeIds, setAssigneeIds] = useState<string[]>(
-    job?.assignees?.map((a: any) => a.id) || [],
-  );
-  const [nonStandard, setNonStandard] = useState<boolean>(
-    Boolean(job?.non_standard),
-  );
 
   const update = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
 
-  const toggleAssignee = (id: string) => {
-    setAssigneeIds((current) =>
-      current.includes(id)
-        ? current.filter((a) => a !== id)
-        : [...current, id],
-    );
-  };
+  const checklistForDept =
+    DEPARTMENT_CHECKLIST_MAP[selectedDept as Department];
+  const hasNoChecklist = checklistForDept === null;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -999,23 +1072,21 @@ function JobForm({
       if (job) {
         await jobsAPI.update(job.id, {
           title: form.title,
-          department: form.department || undefined,
-          description: form.description || undefined,
+          department: selectedDept,
           dueDate: new Date(form.dueDate).toISOString(),
-          maxHours: form.maxHours ? Number(form.maxHours) : null,
-          assigneeIds,
-          nonStandard,
+          maxHours: form.maxHours
+            ? Number(form.maxHours)
+            : null,
         });
       } else {
         await jobsAPI.create({
           reference: form.reference || undefined,
           title: form.title,
-          department: form.department || undefined,
-          assigneeIds,
-          description: form.description || undefined,
+          department: selectedDept,
           dueDate: new Date(form.dueDate).toISOString(),
-          maxHours: form.maxHours ? Number(form.maxHours) : null,
-          nonStandard,
+          maxHours: form.maxHours
+            ? Number(form.maxHours)
+            : null,
         });
       }
       await onSaved();
@@ -1032,11 +1103,15 @@ function JobForm({
     <form className="mt-3 grid gap-4" onSubmit={submit}>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="reference">Referência (opcional)</Label>
+          <Label htmlFor="reference">
+            Referência (opcional)
+          </Label>
           <Input
             id="reference"
             value={form.reference}
-            onChange={(e) => update("reference", e.target.value)}
+            onChange={(e) =>
+              update("reference", e.target.value)
+            }
             placeholder="Gerada automaticamente"
             disabled={Boolean(job)}
           />
@@ -1064,16 +1139,25 @@ function JobForm({
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="department">Departamento</Label>
-          <Input
+          <Label htmlFor="department">Departamento *</Label>
+          <select
             id="department"
-            value={form.department}
-            onChange={(e) => update("department", e.target.value)}
-            placeholder="Ex: Manutenção"
-          />
+            value={selectedDept}
+            onChange={(e) => setSelectedDept(e.target.value)}
+            className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            required
+          >
+            {DEPARTMENTS.map((dept) => (
+              <option key={dept} value={dept}>
+                {dept}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="space-y-2">
-          <Label htmlFor="maxHours">Limite de Horas (opcional)</Label>
+          <Label htmlFor="maxHours">
+            Limite de Horas (opcional)
+          </Label>
           <Input
             id="maxHours"
             type="number"
@@ -1086,61 +1170,39 @@ function JobForm({
         </div>
       </div>
 
-      <label className="flex cursor-pointer items-center gap-2 rounded-md border border-zinc-200 px-3 py-2.5 text-sm text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">
-        <input
-          type="checkbox"
-          checked={nonStandard}
-          onChange={(e) => setNonStandard(e.target.checked)}
-          className="h-4 w-4 accent-red-600"
-        />
-        Trabalho não tipo
-      </label>
-
-      <div className="space-y-2">
-        <Label>Funcionários Atribuídos</Label>
-        <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border border-zinc-200 p-2 dark:border-zinc-700">
-          {users.map((u: any) => (
-            <label
-              key={u.id}
-              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800"
-            >
-              <input
-                type="checkbox"
-                checked={assigneeIds.includes(u.id)}
-                onChange={() => toggleAssignee(u.id)}
-                className="h-4 w-4"
-              />
-              {u.nome}
-            </label>
-          ))}
-        </div>
-        <p className="text-xs text-zinc-400">
-          {assigneeIds.length} funcionário(s) selecionado(s).
-        </p>
-      </div>
-      {!job && (
+      {!job && !hasNoChecklist && (
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-800 dark:bg-zinc-800/50">
           <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
-            Fases (iguais para todos os trabalhos)
+            Fases para {selectedDept}
           </p>
           <ul className="mt-1.5 space-y-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-            {JOB_CHECKLIST_ITEMS.map((item) => (
-              <li key={item.key}>• {item.label}</li>
+            {checklistForDept?.map((key) => (
+              <li key={key}>
+                • {CHECKLIST_LABELS[key] || key}
+              </li>
             ))}
           </ul>
         </div>
       )}
-      <div className="space-y-2">
-        <Label htmlFor="description">Descrição / Âmbito</Label>
-        <Textarea
-          id="description"
-          value={form.description}
-          onChange={(e) => update("description", e.target.value)}
-          placeholder="Descreva o trabalho a executar e as condições relevantes."
-        />
-      </div>
+
+      {!job && hasNoChecklist && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-amber-700 dark:text-amber-400">
+            Assistência
+          </p>
+          <p className="mt-1 text-xs text-amber-600 dark:text-amber-300">
+            Este trabalho será marcado como concluído sem fases
+            intermédias.
+          </p>
+        </div>
+      )}
+
       <div className="mt-2 flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onClose}
+        >
           Cancelar
         </Button>
         <Button
@@ -1148,14 +1210,107 @@ function JobForm({
           className="bg-red-600 hover:bg-red-700"
           disabled={loading}
         >
-          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {loading && (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          )}
           {job ? "Guardar Alterações" : "Criar Trabalho"}
         </Button>
       </div>
     </form>
   );
 }
+function DeleteJobForm({
+  job,
+  onClose,
+  onDeleted,
+}: {
+  job: any;
+  onClose: () => void;
+  onDeleted: () => Promise<void>;
+}) {
+  const [confirmText, setConfirmText] = useState("");
+  const [loading, setLoading] = useState(false);
 
+  const expected = (job.title || "").trim();
+  const matches = confirmText.trim() === expected;
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!matches) return;
+    setLoading(true);
+    try {
+      // O trigger na Supabase transforma isto em soft delete
+      await jobsAPI.delete(job.id);
+      await onDeleted();
+      onClose();
+    } catch (error) {
+      console.error("Erro ao eliminar trabalho:", error);
+      alert("Erro ao eliminar trabalho.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form className="mt-3 space-y-4" onSubmit={submit}>
+      <div className="flex gap-3 rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/20">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+        <div className="text-xs text-red-700 dark:text-red-400">
+          <p className="font-medium">
+            Esta ação não pode ser desfeita.
+          </p>
+          <p className="mt-1">
+            O trabalho{" "}
+            <span className="font-mono">{job.reference}</span> e
+            as respetivas fases deixarão de aparecer na lista.
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label
+          htmlFor="confirmDelete"
+          className="text-sm font-normal"
+        >
+          Para confirmar, escreve o nome do trabalho:
+        </Label>
+        <p className="select-all rounded-md bg-zinc-100 px-3 py-2 font-mono text-sm text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100">
+          {expected}
+        </p>
+        <Input
+          id="confirmDelete"
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder={expected}
+          autoComplete="off"
+          autoFocus
+        />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onClose}
+        >
+          Cancelar
+        </Button>
+        <Button
+          type="submit"
+          disabled={!matches || loading}
+          className="bg-red-600 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+        >
+          {loading ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Trash2 className="mr-2 h-4 w-4" />
+          )}
+          Eliminar
+        </Button>
+      </div>
+    </form>
+  );
+}
 function CompletionForm({
   job,
   overdue,
@@ -1228,7 +1383,9 @@ function CompletionForm({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="wentWrong">O que correu mal / constrangimentos</Label>
+        <Label htmlFor="wentWrong">
+          O que correu mal / constrangimentos
+        </Label>
         <Textarea
           id="wentWrong"
           value={form.wentWrong}
@@ -1238,7 +1395,9 @@ function CompletionForm({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="conclusion">Conclusão e Próximos Passos</Label>
+        <Label htmlFor="conclusion">
+          Conclusão e Próximos Passos
+        </Label>
         <Textarea
           id="conclusion"
           value={form.conclusion}
@@ -1253,14 +1412,20 @@ function CompletionForm({
           <Textarea
             id="delayReason"
             value={form.delayReason}
-            onChange={(e) => update("delayReason", e.target.value)}
+            onChange={(e) =>
+              update("delayReason", e.target.value)
+            }
             required
             className="min-h-24"
           />
         </div>
       )}
       <div className="flex justify-end gap-2 pt-2">
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onClose}
+        >
           Cancelar
         </Button>
         <Button
@@ -1268,7 +1433,9 @@ function CompletionForm({
           disabled={loading}
           className="bg-red-600 hover:bg-red-700"
         >
-          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {loading && (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          )}
           Guardar Relatório e Concluir
         </Button>
       </div>
