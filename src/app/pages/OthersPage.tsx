@@ -1,5 +1,6 @@
 // src/app/pages/OthersPage.tsx
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import * as ScrollArea from "@radix-ui/react-scroll-area";
 import { useApp } from "../AppContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -12,7 +13,6 @@ import {
   DialogTitle,
   DialogDescription,
 } from "../components/ui/dialog";
-import { Badge } from "../components/ui/badge";
 import {
   Search,
   Trash2,
@@ -33,14 +33,15 @@ import {
   Package,
   Euro,
   AlertTriangle,
+  RefreshCw,
+  Loader2,
   ChevronLeft,
   ChevronRight,
-  RefreshCw,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 
-// ==================== CONSTANTES ====================
-const PAGE_SIZE = 20;
-
+// ==================== TIPOS ====================
 type SortDir = "asc" | "desc";
 
 interface StockFilters {
@@ -59,26 +60,29 @@ const EMPTY_FILTERS: StockFilters = {
 
 const UNIDADES = [
   { value: "unidades", label: "un." },
+  { value: "un", label: "un." },
   { value: "kgs", label: "kg" },
+  { value: "kg", label: "kg" },
   { value: "litros", label: "L" },
   { value: "metros", label: "m" },
   { value: "metros_quadrados", label: "m²" },
+  { value: "cento", label: "Cento" },
+  { value: "cx", label: "Cx" },
 ];
+
+const PAGE_SIZE = 100;
 
 // ==================== UTILITÁRIOS ====================
 function fmtDate(v: string | null | undefined) {
   if (!v) return "—";
   const d = new Date(v);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("pt-PT");
+  return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("pt-PT");
 }
 
 function fmtEuro(v: any) {
   if (v === null || v === undefined || v === "") return "—";
   return new Intl.NumberFormat("pt-PT", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
+    style: "currency", currency: "EUR", minimumFractionDigits: 2,
   }).format(Number(v));
 }
 
@@ -108,7 +112,7 @@ function downloadCsv(filename: string, headers: string[], rows: (string | number
 
 // ==================== SUBCOMPONENTES ====================
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
-  if (!active) return <ArrowUpDown className="ml-1 inline h-3 w-3 opacity-40" />;
+  if (!active) return <ArrowUpDown className="ml-1 inline h-3 w-3 opacity-30" />;
   return dir === "asc"
     ? <ArrowUp className="ml-1 inline h-3 w-3" />
     : <ArrowDown className="ml-1 inline h-3 w-3" />;
@@ -120,22 +124,22 @@ function KpiCard({
   label: string; value: string; sub?: string;
   icon: React.ElementType; accent?: "red" | "amber" | "green" | "blue";
 }) {
-  const colours = {
-    red:   "text-red-600   bg-red-50   dark:bg-red-950/30   dark:text-red-400",
+  const cls = {
+    red:   "text-red-600 bg-red-50 dark:bg-red-950/30 dark:text-red-400",
     amber: "text-amber-600 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400",
     green: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400",
-    blue:  "text-blue-600  bg-blue-50  dark:bg-blue-950/30  dark:text-blue-400",
-  };
-  const cls = colours[accent ?? "blue"];
+    blue:  "text-blue-600 bg-blue-50 dark:bg-blue-950/30 dark:text-blue-400",
+  }[accent ?? "blue"];
+
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-900">
-      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${cls}`}>
-        <Icon className="h-5 w-5" />
+    <div className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${cls}`}>
+        <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0">
-        <p className="truncate text-xs font-medium text-zinc-500 dark:text-zinc-400">{label}</p>
-        <p className="mt-0.5 text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">{value}</p>
-        {sub && <p className="mt-0.5 text-[11px] text-zinc-400">{sub}</p>}
+        <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
+        <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">{value}</p>
+        {sub && <p className="text-[10px] text-zinc-400">{sub}</p>}
       </div>
     </div>
   );
@@ -144,40 +148,29 @@ function KpiCard({
 function Pagination({
   page, total, pageSize, onChange,
 }: { page: number; total: number; pageSize: number; onChange: (p: number) => void }) {
-  const pages = Math.ceil(total / pageSize);
-  if (pages <= 1) return null;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const from = Math.min((page - 1) * pageSize + 1, total);
+  const to = Math.min(page * pageSize, total);
   return (
-    <div className="flex items-center justify-between border-t border-zinc-100 px-5 py-3 dark:border-zinc-800">
-      <span className="text-xs text-zinc-400">
-        {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, total)} de {total}
-      </span>
+    <div className="flex shrink-0 items-center justify-between border-t border-zinc-100 bg-white px-4 py-2 dark:border-zinc-800 dark:bg-zinc-950">
+      <p className="text-xs text-zinc-500">
+        {total === 0 ? "0 itens" : `${from}–${to} de ${total.toLocaleString("pt-PT")} itens`}
+      </p>
       <div className="flex items-center gap-1">
-        <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page <= 1} onClick={() => onChange(page - 1)}>
+        <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page === 1} onClick={() => onChange(1)}>
+          <ChevronsLeft className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page === 1} onClick={() => onChange(page - 1)}>
           <ChevronLeft className="h-4 w-4" />
         </Button>
-        {Array.from({ length: Math.min(pages, 5) }, (_, i) => {
-          let p = i + 1;
-          if (pages > 5) {
-            if (page <= 3) p = i + 1;
-            else if (page >= pages - 2) p = pages - 4 + i;
-            else p = page - 2 + i;
-          }
-          return (
-            <button
-              key={p}
-              onClick={() => onChange(p)}
-              className={`h-7 w-7 rounded text-xs font-medium transition-colors ${
-                p === page
-                  ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
-                  : "text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-              }`}
-            >
-              {p}
-            </button>
-          );
-        })}
-        <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page >= pages} onClick={() => onChange(page + 1)}>
+        <span className="px-2 text-xs text-zinc-600 dark:text-zinc-300">
+          {page} / {totalPages}
+        </span>
+        <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page === totalPages} onClick={() => onChange(page + 1)}>
           <ChevronRight className="h-4 w-4" />
+        </Button>
+        <Button variant="ghost" size="icon" className="h-7 w-7" disabled={page === totalPages} onClick={() => onChange(totalPages)}>
+          <ChevronsRight className="h-4 w-4" />
         </Button>
       </div>
     </div>
@@ -187,7 +180,7 @@ function Pagination({
 // ==================== COMPONENTE PRINCIPAL ====================
 export function OthersPage() {
   const {
-    users, stockItems, stockMovements,
+    users, stockItems, stockMovements, stockItemsTotal,
     addStockItem, updateStockItem, deleteStockItem,
     addStockMovement, deleteStockMovement,
     loadStockData, currentUser,
@@ -197,6 +190,10 @@ export function OthersPage() {
   const [jobs, setJobs] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
+  // paginação client-side
+  const [stockPage, setStockPage] = useState(1);
+  const [movPage, setMovPage] = useState(1);
+
   // modais
   const [isItemModal, setIsItemModal] = useState(false);
   const [editingItem, setEditingItem] = useState<any | null>(null);
@@ -204,15 +201,13 @@ export function OthersPage() {
 
   // filtros stock
   const [filters, setFilters] = useState<StockFilters>({ ...EMPTY_FILTERS });
-  const [showFilters, setShowFilters] = useState(false);
+  const [showAdvFilters, setShowAdvFilters] = useState(false);
   const [stockSort, setStockSort] = useState<{ key: string; dir: SortDir }>({ key: "nome", dir: "asc" });
-  const [stockPage, setStockPage] = useState(1);
 
   // filtros movimentos
   const [searchMov, setSearchMov] = useState("");
   const [tipoMov, setTipoMov] = useState<"todos" | "levantamento" | "devolucao">("todos");
   const [movSort, setMovSort] = useState<{ key: string; dir: SortDir }>({ key: "data", dir: "desc" });
-  const [movPage, setMovPage] = useState(1);
 
   // form artigo
   const [itemData, setItemData] = useState({
@@ -237,52 +232,29 @@ export function OthersPage() {
     jobsAPI.getAll().then(setJobs).catch(() => {});
   }, []);
 
-  // reset paginação ao filtrar
+  // Reset page ao mudar filtros
   useEffect(() => { setStockPage(1); }, [filters, stockSort]);
   useEffect(() => { setMovPage(1); }, [searchMov, tipoMov, movSort]);
 
   // ==================== PERMISSÕES ====================
-  const isAdmin =
-    currentUser?.role === "administrador" ||
-    currentUser?.role === "escritorio" ||
-    currentUser?.role === "projeto";
+  const isAdmin = ["administrador", "escritorio", "projeto"].includes(currentUser?.role ?? "");
 
-  // ==================== FILTROS STOCK ====================
-  const activeCount = [
-    filters.search, filters.identificacao,
-    filters.referenciaContabilidade,
+  // ==================== FILTRAGEM STOCK ====================
+  const activeFiltersCount = [
+    filters.search, filters.identificacao, filters.referenciaContabilidade,
     filters.status !== "todos" ? "x" : "",
   ].filter(Boolean).length;
 
   const filteredStock = useMemo(() => {
     const q = filters.search.toLowerCase();
     let r = stockItems.filter((i: any) => {
-      const matchSearch =
-        !q ||
-        i.nome?.toLowerCase().includes(q) ||
-        i.identificacao?.toLowerCase().includes(q) ||
-        i.tag?.toLowerCase().includes(q);
-      const matchId =
-        !filters.identificacao ||
-        i.identificacao?.toLowerCase().includes(filters.identificacao.toLowerCase());
-      const matchRef =
-        !filters.referenciaContabilidade ||
-        i.referencia_contabilidade
-          ?.toLowerCase()
-          .includes(filters.referenciaContabilidade.toLowerCase());
-      return matchSearch && matchId && matchRef;
+      if (q && !i.nome?.toLowerCase().includes(q) && !i.identificacao?.toLowerCase().includes(q) && !i.tag?.toLowerCase().includes(q)) return false;
+      if (filters.identificacao && !i.identificacao?.toLowerCase().includes(filters.identificacao.toLowerCase())) return false;
+      if (filters.referenciaContabilidade && !i.referencia_contabilidade?.toLowerCase().includes(filters.referenciaContabilidade.toLowerCase())) return false;
+      return true;
     });
-
-    if (filters.status === "esgotado") {
-      r = r.filter((i) => Number(i.quantidade) <= 0);
-    } else if (filters.status === "abaixo_minimo") {
-      r = r.filter(
-        (i) =>
-          i.estoque_minimo != null &&
-          Number(i.quantidade) < Number(i.estoque_minimo) &&
-          Number(i.quantidade) > 0
-      );
-    }
+    if (filters.status === "esgotado") r = r.filter((i: any) => Number(i.quantidade) <= 0);
+    else if (filters.status === "abaixo_minimo") r = r.filter((i: any) => i.estoque_minimo != null && Number(i.quantidade) < Number(i.estoque_minimo) && Number(i.quantidade) > 0);
 
     const { key, dir } = stockSort;
     return [...r].sort((a: any, b: any) => {
@@ -294,15 +266,18 @@ export function OthersPage() {
     });
   }, [stockItems, filters, stockSort]);
 
-  const pagedStock = filteredStock.slice((stockPage - 1) * PAGE_SIZE, stockPage * PAGE_SIZE);
+  const pagedStock = useMemo(() => {
+    const start = (stockPage - 1) * PAGE_SIZE;
+    return filteredStock.slice(start, start + PAGE_SIZE);
+  }, [filteredStock, stockPage]);
 
-  // ==================== FILTROS MOVIMENTOS ====================
+  // ==================== FILTRAGEM MOVIMENTOS ====================
   const filteredMovements = useMemo(() => {
     const q = searchMov.toLowerCase();
     let r = stockMovements.filter((m: any) => {
-      const matchTipo = tipoMov === "todos" || m.tipo === tipoMov;
-      const matchQ = !q || m.item_nome?.toLowerCase().includes(q) || m.user_nome?.toLowerCase().includes(q);
-      return matchTipo && matchQ;
+      if (tipoMov !== "todos" && m.tipo !== tipoMov) return false;
+      if (q && !m.item_nome?.toLowerCase().includes(q) && !m.user_nome?.toLowerCase().includes(q)) return false;
+      return true;
     });
     const { key, dir } = movSort;
     return [...r].sort((a: any, b: any) => {
@@ -314,18 +289,16 @@ export function OthersPage() {
     });
   }, [stockMovements, searchMov, tipoMov, movSort]);
 
-  const pagedMovements = filteredMovements.slice((movPage - 1) * PAGE_SIZE, movPage * PAGE_SIZE);
+  const pagedMovements = useMemo(() => {
+    const start = (movPage - 1) * PAGE_SIZE;
+    return filteredMovements.slice(start, start + PAGE_SIZE);
+  }, [filteredMovements, movPage]);
 
   // ==================== MÉTRICAS ====================
-  const totalRef = stockItems.length;
+  const totalRef = stockItemsTotal || stockItems.length;
   const semStock = stockItems.filter((i: any) => Number(i.quantidade) <= 0).length;
-  const abaixoMin = stockItems.filter(
-    (i: any) => i.estoque_minimo != null && Number(i.quantidade) < Number(i.estoque_minimo) && Number(i.quantidade) > 0
-  ).length;
-  const valorTotal = stockItems.reduce(
-    (s: number, i: any) => s + (i.preco_unitario != null ? Number(i.preco_unitario) * Number(i.quantidade) : 0),
-    0
-  );
+  const abaixoMin = stockItems.filter((i: any) => i.estoque_minimo != null && Number(i.quantidade) < Number(i.estoque_minimo) && Number(i.quantidade) > 0).length;
+  const valorTotal = stockItems.reduce((s: number, i: any) => s + (i.preco_unitario != null ? Number(i.preco_unitario) * Number(i.quantidade) : 0), 0);
 
   // ==================== SORT ====================
   const toggleStockSort = (key: string) =>
@@ -336,20 +309,14 @@ export function OthersPage() {
 
   // ==================== CRUD ARTIGOS ====================
   const resetItemForm = () => {
-    setItemData({
-      nome: "", identificacao: "", referenciaContabilidade: "",
-      descricao: "", precoUnitario: "", estoqueMinimo: "",
-      quantidade: 0, data_aquisicao: new Date().toISOString().split("T")[0],
-      unidade_medida: "unidades",
-    });
+    setItemData({ nome: "", identificacao: "", referenciaContabilidade: "", descricao: "", precoUnitario: "", estoqueMinimo: "", quantidade: 0, data_aquisicao: new Date().toISOString().split("T")[0], unidade_medida: "unidades" });
     setEditingItem(null);
   };
 
   const openEdit = (item: any) => {
     setEditingItem(item);
     setItemData({
-      nome: item.nome ?? "",
-      identificacao: item.identificacao ?? "",
+      nome: item.nome ?? "", identificacao: item.identificacao ?? "",
       referenciaContabilidade: item.referencia_contabilidade ?? "",
       descricao: item.descricao ?? "",
       precoUnitario: item.preco_unitario != null ? String(item.preco_unitario) : "",
@@ -389,15 +356,10 @@ export function OthersPage() {
   };
 
   // ==================== CRUD MOVIMENTOS ====================
-  const resetMovForm = () =>
-    setMovData({
-      user_id: currentUser?.id ?? "",
-      quantidade: 1,
-      tipo: "levantamento",
-      data: new Date().toISOString().split("T")[0],
-      jobId: "",
-      isManutencao: false,
-    });
+  const resetMovForm = () => setMovData({
+    user_id: currentUser?.id ?? "", quantidade: 1, tipo: "levantamento",
+    data: new Date().toISOString().split("T")[0], jobId: "", isManutencao: false,
+  });
 
   const handleAddMovement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -438,12 +400,11 @@ export function OthersPage() {
   const exportStock = () =>
     downloadCsv(
       `stock-${new Date().toISOString().split("T")[0]}.csv`,
-      ["Artigo", "Identificação", "Ref. Contab.", "Qtd.", "Unidade", "Preço Unit. (€)", "Valor Inv. (€)", "Stock Mín.", "Data Entrada"],
+      ["Artigo", "Identificação", "Ref. Contab.", "Qtd.", "Unidade", "Preço Unit. (€)", "Stock Mín.", "Data Entrada"],
       filteredStock.map((i: any) => [
         i.nome ?? "", i.identificacao ?? "", i.referencia_contabilidade ?? "",
         i.quantidade ?? 0, fmtUnit(i),
         i.preco_unitario != null ? Number(i.preco_unitario).toFixed(2) : "",
-        i.preco_unitario != null ? (Number(i.preco_unitario) * Number(i.quantidade)).toFixed(2) : "",
         i.estoque_minimo ?? "", fmtDate(i.data_aquisicao),
       ])
     );
@@ -454,197 +415,123 @@ export function OthersPage() {
       ["Data", "Tipo", "Artigo", "Quem", "Quantidade"],
       filteredMovements.map((m: any) => [
         fmtDate(m.data), m.tipo === "levantamento" ? "Levantamento" : "Devolução",
-        m.item_nome ?? "Removido", m.user_nome ?? "Removido", m.quantidade ?? 0,
+        m.item_nome ?? "", m.user_nome ?? "", m.quantidade ?? 0,
       ])
     );
 
+  const isLoading = stockItems.length === 0 && !refreshing;
+
   // ==================== RENDER ====================
   return (
-    <div className="flex flex-col gap-0 h-full">
-      {/* ── Cabeçalho ERP ── */}
-      <div className="border-b border-zinc-200 bg-white px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-xs text-zinc-400">
-              <span>Intranet</span>
-              <span>/</span>
-              <span className="text-zinc-700 dark:text-zinc-300">Gestão de Stock</span>
-            </div>
-            <h1 className="mt-0.5 text-xl font-semibold text-zinc-900 dark:text-zinc-50">
-              Inventário e Movimentos
-            </h1>
+    <div className="flex h-full flex-col overflow-hidden">
+
+      {/* Cabeçalho */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 bg-white px-6 py-3 dark:border-zinc-800 dark:bg-zinc-950">
+        <div>
+          <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
+            <span>Intranet</span><span>/</span>
+            <span className="text-zinc-600 dark:text-zinc-300">Gestão de Stock</span>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9"
-              onClick={handleRefresh}
-              title="Atualizar dados"
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-9"
-              onClick={tab === "stock" ? exportStock : exportMovements}
-            >
-              <Download className="mr-1.5 h-3.5 w-3.5" />
-              Exportar CSV
-            </Button>
-            <Button
-              size="sm"
-              className="h-9 bg-red-600 text-white hover:bg-red-700"
-              onClick={() => { resetItemForm(); setIsItemModal(true); }}
-            >
-              <PackagePlus className="mr-1.5 h-3.5 w-3.5" />
-              Novo Artigo
-            </Button>
-          </div>
+          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Inventário e Movimentos</h1>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleRefresh} title="Atualizar">
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+          </Button>
+          <Button variant="outline" size="sm" className="h-8"
+            onClick={tab === "stock" ? exportStock : exportMovements}
+            disabled={tab === "stock" ? filteredStock.length === 0 : filteredMovements.length === 0}>
+            <Download className="mr-1.5 h-3.5 w-3.5" />CSV
+          </Button>
+          <Button size="sm" className="h-8 bg-red-600 text-white hover:bg-red-700"
+            onClick={() => { resetItemForm(); setIsItemModal(true); }}>
+            <PackagePlus className="mr-1.5 h-3.5 w-3.5" />Novo Artigo
+          </Button>
         </div>
       </div>
 
-      {/* ── KPI Strip ── */}
-      <div className="grid grid-cols-2 gap-3 border-b border-zinc-200 bg-zinc-50 px-6 py-4 dark:border-zinc-800 dark:bg-zinc-900/50 sm:grid-cols-4">
-        <KpiCard
-          label="Referências Ativas"
-          value={String(totalRef)}
-          icon={Package}
-          accent="blue"
-        />
-        <KpiCard
-          label="Sem Stock"
-          value={String(semStock)}
-          sub={semStock > 0 ? "artigos esgotados" : "tudo em ordem"}
-          icon={TrendingDown}
-          accent={semStock > 0 ? "red" : "green"}
-        />
-        <KpiCard
-          label="Abaixo do Mínimo"
-          value={String(abaixoMin)}
-          sub={abaixoMin > 0 ? "reposição necessária" : "níveis normais"}
-          icon={AlertTriangle}
-          accent={abaixoMin > 0 ? "amber" : "green"}
-        />
-        <KpiCard
-          label="Valor em Inventário"
-          value={fmtEuro(valorTotal)}
-          sub="preço unitário × quantidade"
-          icon={Euro}
-          accent="blue"
-        />
+      {/* KPIs */}
+      <div className="grid grid-cols-2 gap-3 border-b border-zinc-200 bg-zinc-50 px-6 py-3 dark:border-zinc-800 dark:bg-zinc-900/50 sm:grid-cols-4">
+        <KpiCard label="Referências" value={totalRef.toLocaleString("pt-PT")} icon={Package} accent="blue" />
+        <KpiCard label="Sem Stock" value={String(semStock)} sub={semStock > 0 ? "esgotados" : "tudo OK"} icon={TrendingDown} accent={semStock > 0 ? "red" : "green"} />
+        <KpiCard label="Abaixo do Mínimo" value={String(abaixoMin)} sub={abaixoMin > 0 ? "repor" : "níveis OK"} icon={AlertTriangle} accent={abaixoMin > 0 ? "amber" : "green"} />
+        <KpiCard label="Valor Inventário" value={fmtEuro(valorTotal)} sub="preço × quantidade" icon={Euro} accent="blue" />
       </div>
 
-      {/* ── Tabs ── */}
-      <div className="flex border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+      {/* Tabs */}
+      <div className="flex shrink-0 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
         {(["stock", "movimentos"] as const).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`flex items-center gap-2 border-b-2 px-5 py-3 text-sm font-medium transition-colors ${
+          <button key={t} onClick={() => setTab(t)}
+            className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-sm font-medium transition-colors ${
               tab === t
                 ? "border-red-600 text-red-600 dark:text-red-400"
                 : "border-transparent text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
             }`}
           >
             {t === "stock" ? <LayoutList className="h-4 w-4" /> : <History className="h-4 w-4" />}
-            {t === "stock" ? "Catálogo de Artigos" : "Entregas / Devoluções"}
+            {t === "stock" ? "Catálogo" : "Movimentos"}
             <span className="ml-1 rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
-              {t === "stock" ? filteredStock.length : filteredMovements.length}
+              {t === "stock" ? filteredStock.length.toLocaleString("pt-PT") : filteredMovements.length.toLocaleString("pt-PT")}
             </span>
           </button>
         ))}
       </div>
 
-      {/* ── Barra de ferramentas ── */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-zinc-100 bg-white px-5 py-2.5 dark:border-zinc-800 dark:bg-zinc-950">
+      {/* Toolbar */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-zinc-100 bg-white px-4 py-2 dark:border-zinc-800 dark:bg-zinc-950">
         {tab === "stock" ? (
           <>
-            <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-zinc-400" />
-              <Input
-                className="h-8 pl-8 text-sm"
-                placeholder="Pesquisar artigo, identificação..."
+            <div className="relative flex-1" style={{ minWidth: 180, maxWidth: 320 }}>
+              <Search className="pointer-events-none absolute left-2.5 top-1.5 h-4 w-4 text-zinc-400" />
+              <Input className="h-7 pl-8 text-sm" placeholder="Pesquisar artigo, identificação..."
                 value={filters.search}
-                onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-              />
+                onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))} />
             </div>
-
-            {/* Pills de status */}
             <div className="flex gap-1">
               {(["todos", "esgotado", "abaixo_minimo"] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setFilters((f) => ({ ...f, status: s }))}
+                <button key={s} onClick={() => setFilters((f) => ({ ...f, status: s }))}
                   className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                     filters.status === s
-                      ? s === "todos"
-                        ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900"
-                        : s === "esgotado"
-                          ? "bg-red-600 text-white"
-                          : "bg-amber-500 text-white"
+                      ? s === "todos" ? "bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                        : s === "esgotado" ? "bg-red-600 text-white"
+                        : "bg-amber-500 text-white"
                       : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                  }`}
-                >
-                  {s === "todos" ? "Todos" : s === "esgotado" ? "Esgotados" : "Abaixo do Mín."}
+                  }`}>
+                  {s === "todos" ? "Todos" : s === "esgotado" ? "Esgotados" : "Abaixo Mín."}
                 </button>
               ))}
             </div>
-
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 ml-auto"
-              onClick={() => setShowFilters((v) => !v)}
-            >
-              <Filter className="mr-1.5 h-3.5 w-3.5" />
-              Filtros Avançados
-              {activeCount > 0 && (
-                <Badge className="ml-1.5 h-4 min-w-4 bg-red-600 px-1 text-[10px] text-white">
-                  {activeCount}
-                </Badge>
+            <Button variant="outline" size="sm" className="ml-auto h-7"
+              onClick={() => setShowAdvFilters((v) => !v)}>
+              <Filter className="mr-1 h-3.5 w-3.5" />Filtros
+              {activeFiltersCount > 0 && (
+                <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[10px] text-white">{activeFiltersCount}</span>
               )}
             </Button>
-
-            {activeCount > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 text-zinc-500"
-                onClick={() => setFilters({ ...EMPTY_FILTERS })}
-              >
-                <X className="mr-1 h-3.5 w-3.5" />
-                Limpar
+            {activeFiltersCount > 0 && (
+              <Button variant="ghost" size="sm" className="h-7 text-zinc-500"
+                onClick={() => setFilters({ ...EMPTY_FILTERS })}>
+                <X className="mr-1 h-3.5 w-3.5" />Limpar
               </Button>
             )}
           </>
         ) : (
           <>
-            <div className="relative flex-1 min-w-[200px] max-w-xs">
-              <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-zinc-400" />
-              <Input
-                className="h-8 pl-8 text-sm"
-                placeholder="Pesquisar artigo ou utilizador..."
-                value={searchMov}
-                onChange={(e) => setSearchMov(e.target.value)}
-              />
+            <div className="relative flex-1" style={{ minWidth: 180, maxWidth: 320 }}>
+              <Search className="pointer-events-none absolute left-2.5 top-1.5 h-4 w-4 text-zinc-400" />
+              <Input className="h-7 pl-8 text-sm" placeholder="Artigo, utilizador..."
+                value={searchMov} onChange={(e) => setSearchMov(e.target.value)} />
             </div>
             <div className="flex gap-1">
               {(["todos", "levantamento", "devolucao"] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTipoMov(t)}
+                <button key={t} onClick={() => setTipoMov(t)}
                   className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                     tipoMov === t
-                      ? t === "todos"
-                        ? "bg-zinc-800 text-white dark:bg-zinc-200 dark:text-zinc-900"
-                        : t === "levantamento"
-                          ? "bg-rose-600 text-white"
-                          : "bg-emerald-600 text-white"
+                      ? t === "todos" ? "bg-zinc-800 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                        : t === "levantamento" ? "bg-rose-600 text-white"
+                        : "bg-emerald-600 text-white"
                       : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-                  }`}
-                >
+                  }`}>
                   {t === "todos" ? "Todos" : t === "levantamento" ? "Levantamentos" : "Devoluções"}
                 </button>
               ))}
@@ -653,261 +540,224 @@ export function OthersPage() {
         )}
       </div>
 
-      {/* Filtros avançados stock */}
-      {tab === "stock" && showFilters && (
-        <div className="border-b border-zinc-100 bg-zinc-50 px-5 py-3 dark:border-zinc-800 dark:bg-zinc-900/60">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Filtros avançados */}
+      {tab === "stock" && showAdvFilters && (
+        <div className="shrink-0 border-b border-zinc-100 bg-zinc-50 px-5 py-3 dark:border-zinc-800 dark:bg-zinc-900/60">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
               <Label className="text-xs text-zinc-500">Identificação</Label>
-              <Input
-                className="h-8 text-sm"
-                placeholder="Ex: A99999"
-                value={filters.identificacao}
-                onChange={(e) => setFilters((f) => ({ ...f, identificacao: e.target.value }))}
-              />
+              <Input className="h-7 text-sm" placeholder="Ex: A99999" value={filters.identificacao}
+                onChange={(e) => setFilters((f) => ({ ...f, identificacao: e.target.value }))} />
             </div>
             <div className="space-y-1">
               <Label className="text-xs text-zinc-500">Ref. Contabilidade</Label>
-              <Input
-                className="h-8 text-sm"
-                placeholder="Ex: 62210001"
-                value={filters.referenciaContabilidade}
-                onChange={(e) => setFilters((f) => ({ ...f, referenciaContabilidade: e.target.value }))}
-              />
+              <Input className="h-7 text-sm" placeholder="Ex: 62210001" value={filters.referenciaContabilidade}
+                onChange={(e) => setFilters((f) => ({ ...f, referenciaContabilidade: e.target.value }))} />
             </div>
           </div>
         </div>
       )}
 
-      {/* ── Tabela Stock ── */}
-      {tab === "stock" && (
-        <div className="flex-1 overflow-auto bg-white dark:bg-zinc-950">
-          <table className="w-full min-w-[760px] text-left text-sm">
-            <thead className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-              <tr>
-                <th className="w-8 px-4 py-2.5 text-center text-zinc-300 dark:text-zinc-600">#</th>
-                <th className="cursor-pointer select-none px-4 py-2.5 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleStockSort("nome")}>
-                  Artigo <SortIcon active={stockSort.key === "nome"} dir={stockSort.dir} />
-                </th>
-                <th className="cursor-pointer select-none px-3 py-2.5 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleStockSort("identificacao")}>
-                  Identificação <SortIcon active={stockSort.key === "identificacao"} dir={stockSort.dir} />
-                </th>
-                <th className="cursor-pointer select-none px-3 py-2.5 text-right hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleStockSort("quantidade")}>
-                  Quantidade <SortIcon active={stockSort.key === "quantidade"} dir={stockSort.dir} />
-                </th>
-                <th className="px-3 py-2.5">Unid.</th>
-                <th className="cursor-pointer select-none px-3 py-2.5 text-right hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleStockSort("preco_unitario")}>
-                  P. Unit. <SortIcon active={stockSort.key === "preco_unitario"} dir={stockSort.dir} />
-                </th>
-                <th className="cursor-pointer select-none px-3 py-2.5 text-right hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleStockSort("data_aquisicao")}>
-                  Entrada <SortIcon active={stockSort.key === "data_aquisicao"} dir={stockSort.dir} />
-                </th>
-                <th className="px-4 py-2.5 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {pagedStock.length ? (
-                pagedStock.map((item: any, idx) => {
-                  const isOut = Number(item.quantidade) <= 0;
-                  const isLow =
-                    !isOut &&
-                    item.estoque_minimo != null &&
-                    Number(item.quantidade) < Number(item.estoque_minimo);
-                  const rowStart = (stockPage - 1) * PAGE_SIZE + idx + 1;
-                  return (
-                    <tr
-                      key={item.id}
-                      className={`group transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900 ${
-                        isOut ? "bg-red-50/40 dark:bg-red-950/10" : isLow ? "bg-amber-50/40 dark:bg-amber-950/10" : ""
-                      }`}
-                    >
-                      <td className="px-4 py-2.5 text-center text-[11px] text-zinc-300 dark:text-zinc-600">{rowStart}</td>
-                      <td className="px-4 py-2.5">
-                        <button
-                          className="text-left"
-                          onClick={() => openEdit(item)}
-                        >
-                          <p className="font-medium text-zinc-800 hover:text-red-600 dark:text-zinc-100 dark:hover:text-red-400">
-                            {item.nome}
-                          </p>
-                          {item.descricao && (
-                            <p className="mt-0.5 text-[11px] text-zinc-400">{item.descricao}</p>
-                          )}
-                        </button>
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-xs text-zinc-500 dark:text-zinc-400">
-                        {item.identificacao ?? "—"}
-                        {item.referencia_contabilidade && (
-                          <div className="text-[10px] text-zinc-400">{item.referencia_contabilidade}</div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <span
-                          className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold ${
-                            isOut
-                              ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
-                              : isLow
-                                ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
-                                : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-                          }`}
-                        >
-                          {isOut && <AlertTriangle className="mr-1 h-3 w-3" />}
-                          {item.quantidade ?? 0}
-                        </span>
-                        {item.estoque_minimo != null && (
-                          <div className="mt-0.5 text-[10px] text-zinc-400">mín: {item.estoque_minimo}</div>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-zinc-500">{fmtUnit(item)}</td>
-                      <td className="px-3 py-2.5 text-right text-xs text-zinc-600 dark:text-zinc-300">
-                        {item.preco_unitario != null ? (
-                          <>
-                            <div>{fmtEuro(item.preco_unitario)}</div>
-                            <div className="text-[10px] text-zinc-400">
-                              {fmtEuro(Number(item.preco_unitario) * Number(item.quantidade))} total
-                            </div>
-                          </>
-                        ) : "—"}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-zinc-500">{fmtDate(item.data_aquisicao)}</td>
-                      <td className="px-4 py-2.5">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 px-2 text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-300"
-                            onClick={() => { resetMovForm(); setMovementItem(item); }}
-                          >
-                            <ArrowDownToLine className="mr-1 h-3 w-3" />
-                            Mov.
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
-                            onClick={() => openEdit(item)}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          {isAdmin && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-zinc-300 hover:bg-red-50 hover:text-red-600 dark:text-zinc-600 dark:hover:bg-red-950/30 dark:hover:text-red-400"
-                              onClick={() => handleDeleteItem(item.id, item.nome)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={8} className="py-16 text-center text-sm text-zinc-400">
-                    <Boxes className="mx-auto mb-3 h-8 w-8 text-zinc-200 dark:text-zinc-700" />
-                    Nenhum artigo encontrado com os filtros aplicados.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-          <Pagination page={stockPage} total={filteredStock.length} pageSize={PAGE_SIZE} onChange={setStockPage} />
-        </div>
-      )}
+      {/* Tabela */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {tab === "stock" && (
+          <>
+            {/* Cabeçalho de colunas */}
+            <div className="flex shrink-0 border-b border-zinc-200 bg-zinc-50 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+              <div className="w-10 shrink-0 px-3 py-2 text-center">#</div>
+              <div className="min-w-0 flex-1 cursor-pointer select-none px-3 py-2 hover:text-zinc-700 dark:hover:text-zinc-200"
+                onClick={() => toggleStockSort("nome")}>
+                Artigo <SortIcon active={stockSort.key === "nome"} dir={stockSort.dir} />
+              </div>
+              <div className="w-36 shrink-0 cursor-pointer select-none px-3 py-2 hover:text-zinc-700 dark:hover:text-zinc-200"
+                onClick={() => toggleStockSort("identificacao")}>
+                Identificação <SortIcon active={stockSort.key === "identificacao"} dir={stockSort.dir} />
+              </div>
+              <div className="w-28 shrink-0 cursor-pointer select-none px-3 py-2 text-right hover:text-zinc-700 dark:hover:text-zinc-200"
+                onClick={() => toggleStockSort("quantidade")}>
+                Quantidade <SortIcon active={stockSort.key === "quantidade"} dir={stockSort.dir} />
+              </div>
+              <div className="w-28 shrink-0 cursor-pointer select-none px-3 py-2 text-right hover:text-zinc-700 dark:hover:text-zinc-200"
+                onClick={() => toggleStockSort("preco_unitario")}>
+                Preço <SortIcon active={stockSort.key === "preco_unitario"} dir={stockSort.dir} />
+              </div>
+              <div className="w-24 shrink-0 cursor-pointer select-none px-3 py-2 hover:text-zinc-700 dark:hover:text-zinc-200"
+                onClick={() => toggleStockSort("data_aquisicao")}>
+                Entrada <SortIcon active={stockSort.key === "data_aquisicao"} dir={stockSort.dir} />
+              </div>
+              <div className="w-32 shrink-0 px-3 py-2 text-right">Ações</div>
+            </div>
 
-      {/* ── Tabela Movimentos ── */}
-      {tab === "movimentos" && (
-        <div className="flex-1 overflow-auto bg-white dark:bg-zinc-950">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-              <tr>
-                <th className="w-8 px-4 py-2.5 text-center text-zinc-300 dark:text-zinc-600">#</th>
-                <th className="cursor-pointer select-none px-4 py-2.5 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleMovSort("data")}>
-                  Data <SortIcon active={movSort.key === "data"} dir={movSort.dir} />
-                </th>
-                <th className="cursor-pointer select-none px-3 py-2.5 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleMovSort("tipo")}>
-                  Tipo <SortIcon active={movSort.key === "tipo"} dir={movSort.dir} />
-                </th>
-                <th className="cursor-pointer select-none px-3 py-2.5 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleMovSort("item_nome")}>
-                  Artigo <SortIcon active={movSort.key === "item_nome"} dir={movSort.dir} />
-                </th>
-                <th className="cursor-pointer select-none px-3 py-2.5 hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleMovSort("user_nome")}>
-                  Responsável <SortIcon active={movSort.key === "user_nome"} dir={movSort.dir} />
-                </th>
-                <th className="cursor-pointer select-none px-3 py-2.5 text-right hover:text-zinc-700 dark:hover:text-zinc-200" onClick={() => toggleMovSort("quantidade")}>
-                  Qtd. <SortIcon active={movSort.key === "quantidade"} dir={movSort.dir} />
-                </th>
-                {isAdmin && <th className="w-12 px-4 py-2.5" />}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {pagedMovements.length ? (
-                pagedMovements.map((m: any, idx) => (
-                  <tr key={m.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-900">
-                    <td className="px-4 py-2.5 text-center text-[11px] text-zinc-300 dark:text-zinc-600">
-                      {(movPage - 1) * PAGE_SIZE + idx + 1}
-                    </td>
-                    <td className="px-4 py-2.5 text-zinc-600 dark:text-zinc-400">{fmtDate(m.data)}</td>
-                    <td className="px-3 py-2.5">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-bold uppercase ${
-                          m.tipo === "levantamento"
-                            ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400"
-                            : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+            {/* Linhas com scroll */}
+            <ScrollArea.Root className="flex-1 overflow-hidden">
+              <ScrollArea.Viewport className="h-full w-full">
+                {isLoading ? (
+                  <div className="flex h-40 items-center justify-center gap-3 text-zinc-400">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    <span className="text-sm">A carregar artigos...</span>
+                  </div>
+                ) : pagedStock.length === 0 ? (
+                  <div className="flex h-40 flex-col items-center justify-center gap-2 text-zinc-400">
+                    <Boxes className="h-7 w-7 text-zinc-200 dark:text-zinc-700" />
+                    <span className="text-sm">Nenhum artigo encontrado com os filtros aplicados.</span>
+                  </div>
+                ) : (
+                  pagedStock.map((item: any, idx: number) => {
+                    const isOut = Number(item.quantidade) <= 0;
+                    const isLow = !isOut && item.estoque_minimo != null && Number(item.quantidade) < Number(item.estoque_minimo);
+                    const globalIdx = (stockPage - 1) * PAGE_SIZE + idx + 1;
+                    return (
+                      <div key={item.id}
+                        className={`flex items-center border-b border-zinc-100 py-2 text-sm transition-colors hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900 ${
+                          isOut ? "bg-red-50/40 dark:bg-red-950/10" : isLow ? "bg-amber-50/30 dark:bg-amber-950/10" : ""
                         }`}
                       >
-                        {m.tipo === "levantamento"
-                          ? <ArrowUpFromLine className="h-3 w-3" />
-                          : <ArrowDownToLine className="h-3 w-3" />}
-                        {m.tipo === "levantamento" ? "Levantamento" : "Devolução"}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 font-medium text-zinc-800 dark:text-zinc-100">
-                      {m.item_nome ?? <span className="italic text-zinc-400">Artigo removido</span>}
-                    </td>
-                    <td className="px-3 py-2.5 text-zinc-600 dark:text-zinc-400">
-                      {m.user_nome ?? <span className="italic text-zinc-400">Utilizador removido</span>}
-                    </td>
-                    <td className="px-3 py-2.5 text-right font-semibold text-zinc-800 dark:text-zinc-100">
-                      {m.quantidade ?? 0}
-                    </td>
-                    {isAdmin && (
-                      <td className="px-4 py-2.5 text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-zinc-300 hover:bg-red-50 hover:text-red-600 dark:text-zinc-600 dark:hover:bg-red-950/30 dark:hover:text-red-400"
-                          onClick={() => { if (confirm("Remover este registo?")) deleteStockMovement(m.id); }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={isAdmin ? 7 : 6} className="py-16 text-center text-sm text-zinc-400">
-                    Nenhum registo de movimento encontrado.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-          <Pagination page={movPage} total={filteredMovements.length} pageSize={PAGE_SIZE} onChange={setMovPage} />
-        </div>
-      )}
+                        <div className="w-10 shrink-0 px-3 text-center text-[11px] text-zinc-300 dark:text-zinc-700">{globalIdx}</div>
+                        <div className="min-w-0 flex-1 px-3">
+                          <button className="w-full text-left" onClick={() => openEdit(item)}>
+                            <p className="truncate font-medium text-zinc-800 hover:text-red-600 dark:text-zinc-100 dark:hover:text-red-400">{item.nome}</p>
+                            {item.descricao && <p className="truncate text-[11px] text-zinc-400">{item.descricao}</p>}
+                          </button>
+                        </div>
+                        <div className="w-36 shrink-0 px-3 font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                          <div className="truncate">{item.identificacao ?? "—"}</div>
+                          {item.referencia_contabilidade && (
+                            <div className="truncate text-[10px] text-zinc-400">{item.referencia_contabilidade}</div>
+                          )}
+                        </div>
+                        <div className="w-28 shrink-0 px-3 text-right">
+                          <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold ${
+                            isOut ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400"
+                              : isLow ? "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"
+                              : "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                          }`}>
+                            {isOut && <AlertTriangle className="h-3 w-3" />}
+                            {item.quantidade ?? 0} {fmtUnit(item)}
+                          </span>
+                          {item.estoque_minimo != null && (
+                            <div className="mt-0.5 text-[10px] text-zinc-400">mín: {item.estoque_minimo}</div>
+                          )}
+                        </div>
+                        <div className="w-28 shrink-0 px-3 text-right text-xs text-zinc-600 dark:text-zinc-300">
+                          {item.preco_unitario != null ? (
+                            <>
+                              <div>{fmtEuro(item.preco_unitario)}</div>
+                              <div className="text-[10px] text-zinc-400">{fmtEuro(Number(item.preco_unitario) * Number(item.quantidade))}</div>
+                            </>
+                          ) : "—"}
+                        </div>
+                        <div className="w-24 shrink-0 px-3 text-xs text-zinc-500">{fmtDate(item.data_aquisicao)}</div>
+                        <div className="w-32 shrink-0 px-3">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-zinc-600 hover:text-zinc-900 dark:text-zinc-300"
+                              onClick={() => { resetMovForm(); setMovementItem(item); }}>
+                              <ArrowDownToLine className="mr-1 h-3 w-3" />Mov.
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-400 hover:text-zinc-700"
+                              onClick={() => openEdit(item)}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            {isAdmin && (
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-300 hover:bg-red-50 hover:text-red-600 dark:text-zinc-600 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+                                onClick={() => handleDeleteItem(item.id, item.nome)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </ScrollArea.Viewport>
+              <ScrollArea.Scrollbar orientation="vertical" className="flex w-2 touch-none select-none border-l border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900">
+                <ScrollArea.Thumb className="relative flex-1 rounded-full bg-zinc-300 dark:bg-zinc-700" />
+              </ScrollArea.Scrollbar>
+            </ScrollArea.Root>
 
-      {/* ── Modal: Artigo ── */}
+            <Pagination page={stockPage} total={filteredStock.length} pageSize={PAGE_SIZE} onChange={setStockPage} />
+          </>
+        )}
+
+        {tab === "movimentos" && (
+          <>
+            {/* Cabeçalho de colunas */}
+            <div className="flex shrink-0 border-b border-zinc-200 bg-zinc-50 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+              <div className="w-10 shrink-0 px-3 py-2 text-center">#</div>
+              <div className="w-24 shrink-0 cursor-pointer select-none px-3 py-2" onClick={() => toggleMovSort("data")}>
+                Data <SortIcon active={movSort.key === "data"} dir={movSort.dir} />
+              </div>
+              <div className="w-32 shrink-0 px-3 py-2">Tipo</div>
+              <div className="min-w-0 flex-1 cursor-pointer select-none px-3 py-2" onClick={() => toggleMovSort("item_nome")}>
+                Artigo <SortIcon active={movSort.key === "item_nome"} dir={movSort.dir} />
+              </div>
+              <div className="w-36 shrink-0 cursor-pointer select-none px-3 py-2" onClick={() => toggleMovSort("user_nome")}>
+                Responsável <SortIcon active={movSort.key === "user_nome"} dir={movSort.dir} />
+              </div>
+              <div className="w-20 shrink-0 cursor-pointer select-none px-3 py-2 text-right" onClick={() => toggleMovSort("quantidade")}>
+                Qtd. <SortIcon active={movSort.key === "quantidade"} dir={movSort.dir} />
+              </div>
+              {isAdmin && <div className="w-12 shrink-0 px-3 py-2" />}
+            </div>
+
+            <ScrollArea.Root className="flex-1 overflow-hidden">
+              <ScrollArea.Viewport className="h-full w-full">
+                {pagedMovements.length === 0 ? (
+                  <div className="flex h-40 items-center justify-center text-sm text-zinc-400">
+                    Nenhum registo de movimento encontrado.
+                  </div>
+                ) : (
+                  pagedMovements.map((m: any, idx: number) => {
+                    const globalIdx = (movPage - 1) * PAGE_SIZE + idx + 1;
+                    return (
+                      <div key={m.id} className="flex items-center border-b border-zinc-100 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900">
+                        <div className="w-10 shrink-0 px-3 text-center text-[11px] text-zinc-300 dark:text-zinc-700">{globalIdx}</div>
+                        <div className="w-24 shrink-0 px-3 text-xs text-zinc-500">{fmtDate(m.data)}</div>
+                        <div className="w-32 shrink-0 px-3">
+                          <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-bold uppercase ${
+                            m.tipo === "levantamento"
+                              ? "bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400"
+                              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+                          }`}>
+                            {m.tipo === "levantamento" ? <ArrowUpFromLine className="h-3 w-3" /> : <ArrowDownToLine className="h-3 w-3" />}
+                            {m.tipo === "levantamento" ? "Levant." : "Devol."}
+                          </span>
+                        </div>
+                        <div className="min-w-0 flex-1 px-3 font-medium text-zinc-800 dark:text-zinc-100 truncate">
+                          {m.item_nome ?? <span className="italic font-normal text-zinc-400">Removido</span>}
+                        </div>
+                        <div className="w-36 shrink-0 px-3 text-xs text-zinc-500 truncate">{m.user_nome ?? "—"}</div>
+                        <div className="w-20 shrink-0 px-3 text-right font-semibold text-zinc-800 dark:text-zinc-100">{m.quantidade ?? 0}</div>
+                        {isAdmin && (
+                          <div className="w-12 shrink-0 px-3 text-right">
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-300 hover:bg-red-50 hover:text-red-600 dark:text-zinc-600 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+                              onClick={() => { if (confirm("Remover este registo?")) deleteStockMovement(m.id); }}>
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </ScrollArea.Viewport>
+              <ScrollArea.Scrollbar orientation="vertical" className="flex w-2 touch-none select-none border-l border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900">
+                <ScrollArea.Thumb className="relative flex-1 rounded-full bg-zinc-300 dark:bg-zinc-700" />
+              </ScrollArea.Scrollbar>
+            </ScrollArea.Root>
+
+            <Pagination page={movPage} total={filteredMovements.length} pageSize={PAGE_SIZE} onChange={setMovPage} />
+          </>
+        )}
+      </div>
+
+      {/* Modal: Artigo */}
       <Dialog open={isItemModal} onOpenChange={(o) => { setIsItemModal(o); if (!o) resetItemForm(); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingItem ? "Editar Artigo" : "Novo Artigo de Stock"}</DialogTitle>
             <DialogDescription>
-              {editingItem ? "Actualize os detalhes do artigo." : "Preencha os dados para registar um novo artigo no inventário."}
+              {editingItem ? "Actualize os detalhes do artigo." : "Preencha os dados para registar no inventário."}
             </DialogDescription>
           </DialogHeader>
           <form className="mt-2 space-y-4" onSubmit={handleSubmitItem}>
@@ -937,7 +787,9 @@ export function OthersPage() {
                 <select id="i-uni" value={itemData.unidade_medida}
                   onChange={(e) => setItemData((d) => ({ ...d, unidade_medida: e.target.value }))}
                   className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900">
-                  {UNIDADES.map((u) => <option key={u.value} value={u.value}>{u.value} ({u.label})</option>)}
+                  {[...new Map(UNIDADES.map(u => [u.value, u])).values()].map((u) => (
+                    <option key={u.value} value={u.value}>{u.value} ({u.label})</option>
+                  ))}
                 </select>
               </div>
               <div className="space-y-1.5">
@@ -955,7 +807,7 @@ export function OthersPage() {
                 <Input id="i-min" type="number" min="0" placeholder="0" value={itemData.estoqueMinimo}
                   onChange={(e) => setItemData((d) => ({ ...d, estoqueMinimo: e.target.value }))} />
               </div>
-              <div className="space-y-1.5 sm:col-span-2">
+              <div className="sm:col-span-2 space-y-1.5">
                 <Label htmlFor="i-preco">Preço Unitário (€)</Label>
                 <Input id="i-preco" type="number" min="0" step="0.01" placeholder="0.00" value={itemData.precoUnitario}
                   onChange={(e) => setItemData((d) => ({ ...d, precoUnitario: e.target.value }))} />
@@ -971,138 +823,79 @@ export function OthersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Modal: Movimento ── */}
+      {/* Modal: Movimento */}
       <Dialog open={Boolean(movementItem)} onOpenChange={(o) => { if (!o) { resetMovForm(); setMovementItem(null); } }}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
             <DialogTitle>Registar Movimento</DialogTitle>
-            <DialogDescription>
-              Levantamento desconta do stock. Devolução repõe.
-            </DialogDescription>
+            <DialogDescription>Levantamento desconta. Devolução repõe.</DialogDescription>
           </DialogHeader>
           {movementItem && (
             <form className="space-y-4" onSubmit={handleAddMovement}>
-              {/* Artigo selecionado */}
               <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800">
                 <p className="font-semibold text-zinc-800 dark:text-zinc-100">{movementItem.nome}</p>
                 <p className="mt-0.5 text-xs text-zinc-500">
-                  {movementItem.identificacao} · Disponível:{" "}
-                  <strong>{movementItem.quantidade} {fmtUnit(movementItem)}</strong>
+                  {movementItem.identificacao} · Disponível: <strong>{movementItem.quantidade} {fmtUnit(movementItem)}</strong>
                 </p>
               </div>
-
-              {/* Tipo */}
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setMovData((d) => ({ ...d, tipo: "levantamento" }))}
-                  className={`flex items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition-colors ${
-                    movData.tipo === "levantamento"
-                      ? "border-rose-600 bg-rose-600 text-white"
-                      : "border-zinc-200 text-zinc-600 hover:border-rose-300 dark:border-zinc-700 dark:text-zinc-300"
-                  }`}
-                >
-                  <ArrowUpFromLine className="h-4 w-4" /> Levantamento
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMovData((d) => ({ ...d, tipo: "devolucao" }))}
-                  className={`flex items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition-colors ${
-                    movData.tipo === "devolucao"
-                      ? "border-emerald-600 bg-emerald-600 text-white"
-                      : "border-zinc-200 text-zinc-600 hover:border-emerald-300 dark:border-zinc-700 dark:text-zinc-300"
-                  }`}
-                >
-                  <ArrowDownToLine className="h-4 w-4" /> Devolução
-                </button>
+                {(["levantamento", "devolucao"] as const).map((t) => (
+                  <button key={t} type="button" onClick={() => setMovData((d) => ({ ...d, tipo: t }))}
+                    className={`flex items-center justify-center gap-2 rounded-lg border py-2 text-sm font-medium transition-colors ${
+                      movData.tipo === t
+                        ? t === "levantamento" ? "border-rose-600 bg-rose-600 text-white" : "border-emerald-600 bg-emerald-600 text-white"
+                        : "border-zinc-200 text-zinc-600 hover:border-zinc-400 dark:border-zinc-700 dark:text-zinc-300"
+                    }`}>
+                    {t === "levantamento" ? <ArrowUpFromLine className="h-4 w-4" /> : <ArrowDownToLine className="h-4 w-4" />}
+                    {t === "levantamento" ? "Levantamento" : "Devolução"}
+                  </button>
+                ))}
               </div>
-
-              {/* Destino (levantamento) */}
               {movData.tipo === "levantamento" && (
                 <div className="space-y-2">
                   <Label className="text-xs">Destino *</Label>
                   <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setMovData((d) => ({ ...d, isManutencao: false }))}
-                      className={`rounded-lg border py-1.5 text-xs font-medium transition-colors ${
-                        !movData.isManutencao
-                          ? "border-red-600 bg-red-600 text-white"
-                          : "border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
-                      }`}
-                    >
+                    <button type="button" onClick={() => setMovData((d) => ({ ...d, isManutencao: false }))}
+                      className={`rounded-lg border py-1.5 text-xs font-medium transition-colors ${!movData.isManutencao ? "border-red-600 bg-red-600 text-white" : "border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"}`}>
                       Projeto
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setMovData((d) => ({ ...d, isManutencao: true, jobId: "" }))}
-                      className={`rounded-lg border py-1.5 text-xs font-medium transition-colors ${
-                        movData.isManutencao
-                          ? "border-zinc-700 bg-zinc-700 text-white"
-                          : "border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
-                      }`}
-                    >
+                    <button type="button" onClick={() => setMovData((d) => ({ ...d, isManutencao: true, jobId: "" }))}
+                      className={`rounded-lg border py-1.5 text-xs font-medium transition-colors ${movData.isManutencao ? "border-zinc-700 bg-zinc-700 text-white" : "border-zinc-200 text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"}`}>
                       Manutenção
                     </button>
                   </div>
                   {!movData.isManutencao && (
-                    <select
-                      required
-                      value={movData.jobId}
-                      onChange={(e) => setMovData((d) => ({ ...d, jobId: e.target.value }))}
-                      className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                    >
+                    <select required value={movData.jobId} onChange={(e) => setMovData((d) => ({ ...d, jobId: e.target.value }))}
+                      className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900">
                       <option value="">Selecionar projeto...</option>
                       {jobs.map((j: any) => <option key={j.id} value={j.id}>{j.title}</option>)}
                     </select>
                   )}
                 </div>
               )}
-
-              {/* Responsável */}
               <div className="space-y-1.5">
                 <Label htmlFor="m-user" className="text-xs">Responsável *</Label>
-                <select
-                  id="m-user"
-                  required
-                  value={movData.user_id}
-                  onChange={(e) => setMovData((d) => ({ ...d, user_id: e.target.value }))}
-                  className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900"
-                >
+                <select id="m-user" required value={movData.user_id} onChange={(e) => setMovData((d) => ({ ...d, user_id: e.target.value }))}
+                  className="w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900">
                   <option value="">Selecionar utilizador...</option>
-                  {users.map((u: any) => (
-                    <option key={u.id} value={u.id}>{u.nome}</option>
-                  ))}
+                  {users.map((u: any) => <option key={u.id} value={u.id}>{u.nome}</option>)}
                 </select>
               </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="m-qtd" className="text-xs">Quantidade *</Label>
-                  <Input
-                    id="m-qtd" type="number" min="1" required
-                    value={movData.quantidade}
-                    onChange={(e) => setMovData((d) => ({ ...d, quantidade: Math.max(1, parseInt(e.target.value) || 1) }))}
-                  />
+                  <Input id="m-qtd" type="number" min="1" required value={movData.quantidade}
+                    onChange={(e) => setMovData((d) => ({ ...d, quantidade: Math.max(1, parseInt(e.target.value) || 1) }))} />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="m-data" className="text-xs">Data *</Label>
-                  <Input
-                    id="m-data" type="date" required
-                    value={movData.data}
-                    onChange={(e) => setMovData((d) => ({ ...d, data: e.target.value }))}
-                  />
+                  <Input id="m-data" type="date" required value={movData.data}
+                    onChange={(e) => setMovData((d) => ({ ...d, data: e.target.value }))} />
                 </div>
               </div>
-
               <div className="flex justify-end gap-2 border-t pt-3">
-                <Button type="button" variant="outline" onClick={() => { resetMovForm(); setMovementItem(null); }}>
-                  Cancelar
-                </Button>
-                <Button
-                  type="submit"
-                  className={movData.tipo === "devolucao" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-rose-600 hover:bg-rose-700"}
-                >
+                <Button type="button" variant="outline" onClick={() => { resetMovForm(); setMovementItem(null); }}>Cancelar</Button>
+                <Button type="submit" className={movData.tipo === "devolucao" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-rose-600 hover:bg-rose-700"}>
                   Confirmar
                 </Button>
               </div>

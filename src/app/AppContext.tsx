@@ -46,7 +46,13 @@ interface AppContextType {
 
   stockItems: any[];
   stockMovements: any[];
-  loadStockData: () => Promise<void>;
+  stockItemsTotal: number;
+  stockItemsPage: number;
+  loadStockData: (
+    page?: number,
+    limit?: number,
+  ) => Promise<void>;
+  loadMoreStockItems: (page: number) => Promise<void>;
   addStockItem: (item: any) => Promise<void>;
   updateStockItem: (id: string, item: any) => Promise<void>;
   deleteStockItem: (id: string) => Promise<void>;
@@ -163,6 +169,8 @@ export function AppProvider({
   const [stockMovements, setStockMovements] = useState<any[]>(
     [],
   );
+  const [stockItemsTotal, setStockItemsTotal] = useState(0);
+  const [stockItemsPage, setStockItemsPage] = useState(1);
 
   const [notifications, setNotifications] = useState<
     Notification[]
@@ -173,34 +181,78 @@ export function AppProvider({
   const [loading, setLoading] = useState(true);
 
   // ==================== STOCK DATA ====================
-  const loadStockData = useCallback(async () => {
-    try {
-      const [itemsRes, movsRes] = await Promise.all([
-        stockAPI.getItems().catch(() => ({ data: [] })),
-        stockAPI.getMovements().catch(() => ({ data: [] })),
-      ]);
+  // Carrega TODOS os itens em batches de 1000 para suportar 10k+ registos
+  const loadStockData = useCallback(
+    async (_page?: number, _limit?: number) => {
+      try {
+        const BATCH = 1000;
+        let allItems: any[] = [];
+        let currentPage = 1;
+        let total = Infinity;
 
-      const items = (itemsRes.data || itemsRes || []).map(
-        (item: any) => ({
-          ...item,
-          quantidade: item.quantidade ?? 0,
-        }),
-      );
+        // Batch loop: continua até carregar tudo
+        while (allItems.length < total) {
+          const res = await stockAPI
+            .getItems({ page: currentPage, limit: BATCH })
+            .catch(() => ({ data: [], total: 0 }));
 
-      const movements = (movsRes.data || movsRes || []).map(
-        (m: any) => ({
+          const batch = (res.data || []).map((item: any) => ({
+            ...item,
+            quantidade: item.quantidade ?? 0,
+          }));
+
+          if (currentPage === 1) {
+            total = res.total || batch.length;
+          }
+
+          allItems = [...allItems, ...batch];
+
+          // Atualiza o estado progressivamente após 1º batch
+          if (currentPage === 1) {
+            setStockItems(allItems);
+            setStockItemsTotal(total);
+          }
+
+          if (batch.length < BATCH) break; // última página
+          currentPage++;
+        }
+
+        setStockItems(allItems);
+        setStockItemsTotal(allItems.length);
+        setStockItemsPage(1);
+
+        // Movimentos em paralelo com o primeiro batch
+        const movsRes = await stockAPI
+          .getMovements()
+          .catch(() => ({ data: [] }));
+
+        const movements = (movsRes.data || []).map((m: any) => ({
           ...m,
           item_nome: m.stock_items?.nome || m.item_nome,
           user_nome: m.users?.nome || m.user_nome,
-        }),
-      );
+        }));
+        setStockMovements(movements);
+      } catch (error) {
+        console.error("Erro ao carregar stock:", error);
+        setStockItems([]);
+        setStockMovements([]);
+        setStockItemsTotal(0);
+      }
+    },
+    [],
+  );
 
-      setStockItems(items);
-      setStockMovements(movements);
+  const loadMoreStockItems = useCallback(async (page: number) => {
+    try {
+      const res = await stockAPI.getItems({ page, limit: 1000 });
+      const newItems = (res.data || []).map((item: any) => ({
+        ...item,
+        quantidade: item.quantidade ?? 0,
+      }));
+      setStockItems((prev) => [...prev, ...newItems]);
+      setStockItemsPage(page);
     } catch (error) {
-      console.error("Erro ao carregar stock:", error);
-      setStockItems([]);
-      setStockMovements([]);
+      console.error("Erro ao carregar mais itens:", error);
     }
   }, []);
 
@@ -431,8 +483,7 @@ export function AppProvider({
       setEquipment(equipmentWithStatus);
       setCalendarEvents(calendarEventsData);
 
-      // ✅ Carrega stock data no refresh
-      await loadStockData();
+      await loadStockData(1, 1000);
     } catch (error) {
       console.error("Error refreshing data:", error);
     } finally {
@@ -578,6 +629,8 @@ export function AppProvider({
     setEquipmentSchedules([]);
     setStockItems([]);
     setStockMovements([]);
+    setStockItemsTotal(0);
+    setStockItemsPage(1);
     setNotifications([]);
     setPermissions({});
   };
@@ -1054,7 +1107,10 @@ export function AppProvider({
 
     stockItems,
     stockMovements,
+    stockItemsTotal,
+    stockItemsPage,
     loadStockData,
+    loadMoreStockItems,
     addStockItem,
     updateStockItem,
     deleteStockItem,

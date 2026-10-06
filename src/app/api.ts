@@ -4,9 +4,9 @@ import {
   projectId,
   publicAnonKey,
 } from "../../utils/supabase/info";
-const WINTOUCH_BASE_URL = "https://o-teu-servidor-wintouch.com/api/v1";
+const WINTOUCH_BASE_URL =
+  "https://o-teu-servidor-wintouch.com/api/v1";
 const WINTOUCH_ENTERPRISE = "O-TEU-ID-DE-EMPRESA";
-
 
 const supabaseUrl = `https://${projectId}.supabase.co`;
 
@@ -808,13 +808,22 @@ export const uploadProductionTaskImage = async (
 
 // ==================== STOCK E MOVIMENTOS API ====================
 export const stockAPI = {
-  getItems: async () => {
-    const { data, error } = await supabase
+  // Retorna { data: StockItem[], total: number }
+  // Usa range() do Supabase para paginação server-side
+  getItems: async (params?: { page?: number; limit?: number }) => {
+    const page = params?.page ?? 1;
+    const limit = params?.limit ?? 1000;
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    const { data, error, count } = await supabase
       .from("stock_items")
-      .select("*")
-      .order("nome", { ascending: true });
+      .select("*", { count: "exact" })
+      .order("nome", { ascending: true })
+      .range(from, to);
+
     if (error) throw error;
-    return { data: data || [] };
+    return { data: data ?? [], total: count ?? 0 };
   },
 
   addItem: async (item: any) => {
@@ -1389,28 +1398,34 @@ export const trackingAPI = {
 export const wintouchAPI = {
   // Ler stock real
   getStock: async (token: string) => {
-    const response = await fetch(`${WINTOUCH_BASE_URL}/inventories`, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "x-current-enterprise": WINTOUCH_ENTERPRISE,
-        "Accept": "application/json"
-      }
-    });
+    const response = await fetch(
+      `${WINTOUCH_BASE_URL}/inventories`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "x-current-enterprise": WINTOUCH_ENTERPRISE,
+          Accept: "application/json",
+        },
+      },
+    );
     return response.json();
   },
 
-//------------WINTOUCH API-----------------------------------------------------------
+  //------------WINTOUCH API-----------------------------------------------------------
   saveWork: async (token: string, data: any) => {
-    const response = await fetch(`${WINTOUCH_BASE_URL}/data_import/entities`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "x-current-enterprise": WINTOUCH_ENTERPRISE,
-        "Content-Type": "application/json"
+    const response = await fetch(
+      `${WINTOUCH_BASE_URL}/data_import/entities`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "x-current-enterprise": WINTOUCH_ENTERPRISE,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify([data]),
       },
-      body: JSON.stringify([data])
-    });
+    );
     return response.json();
-  }
+  },
 };
