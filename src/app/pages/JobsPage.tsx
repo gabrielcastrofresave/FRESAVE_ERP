@@ -1,12 +1,14 @@
 // src/app/pages/JobsPage.tsx
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useApp } from "../AppContext";
 import {
   jobsAPI,
   productionTasksAPI,
   calcJobHoursConsumed,
   JOB_CHECKLIST_ITEMS,
+  type JobFilters,
+  type JobStatusFilter,
 } from "../api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -24,17 +26,36 @@ import {
   AlertTriangle,
   CalendarDays,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   Clock3,
   Download,
-  FileCheck2,
   Loader2,
   Plus,
+  Search,
   Users,
   Pencil,
   Trash2,
   Check,
+  X,
 } from "lucide-react";
+
+const PAGE_SIZE = 10;
+
+const STATUS_OPTIONS: { value: JobStatusFilter; label: string }[] = [
+  { value: "em_curso", label: "Em curso" },
+  { value: "atrasados", label: "Fora do prazo" },
+  { value: "concluido", label: "Concluídos" },
+  { value: "todos", label: "Todos" },
+];
+
+const DEFAULT_FILTERS: Required<JobFilters> = {
+  status: "em_curso",
+  search: "",
+  tipo: "todos",
+  assigneeId: "",
+};
 
 const FRESAVE_LOGO_URL =
   "https://static.wixstatic.com/media/a7ac0c_09785672c3cb48039040f69fa2685900~mv2_d_6384_2650_s_4_2.png/v1/fill/w_200,h_78,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Fresave%20Logotipo.png";
@@ -232,41 +253,103 @@ function downloadReportDoc(job: any) {
 export function JobsPage() {
   const { users, currentUser } = useApp();
   const [jobs, setJobs] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [counts, setCounts] = useState({ active: 0, overdue: 0, completed: 0 });
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [searchInput, setSearchInput] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<any | null>(null);
-  const [jobToComplete, setJobToComplete] = useState<any | null>(
-    null,
-  );
+  const [jobToComplete, setJobToComplete] = useState<any | null>(null);
+  const requestId = useRef(0);
 
   const canCreate =
     currentUser?.role === "administrador" ||
     currentUser?.role === "projeto" ||
     currentUser?.role === "chefe_producao";
 
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const hasActiveFilters =
+    filters.search !== "" ||
+    filters.tipo !== "todos" ||
+    filters.assigneeId !== "";
+
+  // As tarefas de produção só servem para as horas consumidas; carregam uma vez
+  const loadTasks = async () => {
+    try {
+      setTasks(await productionTasksAPI.getAll());
+    } catch (error) {
+      console.error("Erro ao carregar tarefas:", error);
+    }
+  };
+
   // silent = recarrega sem mostrar o spinner (usado depois de marcar fases)
-  const loadAll = async (silent = false) => {
+  const loadPage = async (silent = false) => {
+    const id = ++requestId.current;
     if (!silent) setLoading(true);
     try {
-      const [jobsData, tasksData] = await Promise.all([
-        jobsAPI.getAll(),
-        productionTasksAPI.getAll(),
+      const [pageData, countsData] = await Promise.all([
+        jobsAPI.getPage(page, PAGE_SIZE, {
+          status: filters.status,
+          search: filters.search || undefined,
+          tipo: filters.tipo,
+          assigneeId: filters.assigneeId || undefined,
+        }),
+        jobsAPI.getCounts(),
       ]);
-      setJobs(jobsData);
-      setTasks(tasksData);
+      // Ignora respostas antigas (ex.: escreveste mais letras na pesquisa entretanto)
+      if (id !== requestId.current) return;
+
+      // Se a página ficou vazia (ex.: apagaste o último da página), recua uma
+      const lastPage = Math.max(1, Math.ceil(pageData.total / PAGE_SIZE));
+      if (page > lastPage) {
+        setPage(lastPage);
+        return;
+      }
+
+      setJobs(pageData.jobs);
+      setTotal(pageData.total);
+      setCounts(countsData);
     } catch (error) {
       console.error("Erro ao carregar trabalhos:", error);
     } finally {
-      if (!silent) setLoading(false);
+      if (id === requestId.current && !silent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadAll();
+    loadTasks();
   }, []);
 
+  useEffect(() => {
+    loadPage();
+  }, [page, filters]);
+
+  // Pesquisa só dispara 300 ms depois de parares de escrever
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchInput.trim() !== filters.search) {
+        changeFilter({ search: searchInput.trim() });
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const changeFilter = (patch: Partial<typeof DEFAULT_FILTERS>) => {
+    setFilters((current) => ({ ...current, ...patch }));
+    setPage(1);
+  };
+
+  const clearFilters = () => {
+    setSearchInput("");
+    setFilters((current) => ({ ...DEFAULT_FILTERS, status: current.status }));
+    setPage(1);
+  };
+
   const isOverdue = (job: any) => {
+    if (job.status !== "em_curso") return false;
     const pastDueDate = new Date(job.due_date).getTime() < Date.now();
     if (pastDueDate) return true;
     if (job.max_hours) {
@@ -278,19 +361,6 @@ export function JobsPage() {
 
   const isChecklistComplete = (job: any) =>
     getStages(job).every((s) => s.checked);
-
-  const active = useMemo(
-    () => jobs.filter((j) => j.status === "em_curso"),
-    [jobs],
-  );
-  const completed = useMemo(
-    () => jobs.filter((j) => j.status === "concluido"),
-    [jobs],
-  );
-  const overdue = useMemo(
-    () => active.filter(isOverdue),
-    [active, tasks],
-  );
 
   const handleToggleStage = async (
     jobId: string,
@@ -310,26 +380,18 @@ export function JobsPage() {
                 ? { ...r, checked, checked_at: checkedAt }
                 : r,
             )
-          : [
-              ...rows,
-              { item_key: stageKey, checked, checked_at: checkedAt },
-            ];
+          : [...rows, { item_key: stageKey, checked, checked_at: checkedAt }];
         return { ...job, checklist };
       }),
     );
 
     try {
-      await jobsAPI.toggleStage(
-        jobId,
-        stageKey,
-        checked,
-        currentUser?.id,
-      );
+      await jobsAPI.toggleStage(jobId, stageKey, checked, currentUser?.id);
     } catch (error) {
       console.error("Erro ao atualizar fase:", error);
       alert("Erro ao atualizar fase.");
     } finally {
-      await loadAll(true);
+      await loadPage(true);
     }
   };
 
@@ -337,13 +399,16 @@ export function JobsPage() {
     if (confirm("Eliminar este trabalho? Esta ação não pode ser desfeita.")) {
       try {
         await jobsAPI.delete(id);
-        await loadAll();
+        await loadPage();
       } catch (error) {
         console.error("Erro ao eliminar trabalho:", error);
         alert("Erro ao eliminar trabalho.");
       }
     }
   };
+
+  const firstShown = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const lastShown = Math.min(page * PAGE_SIZE, total);
 
   return (
     <div className="mx-auto max-w-7xl space-y-7">
@@ -391,54 +456,117 @@ export function JobsPage() {
                   setCreateOpen(false);
                   setEditingJob(null);
                 }}
-                onSaved={() => loadAll()}
+                onSaved={() => loadPage()}
               />
             </DialogContent>
           </Dialog>
         )}
       </header>
 
+      {/* Os cartões também funcionam como atalho para o filtro de estado */}
       <section className="grid gap-4 sm:grid-cols-3">
         <WorkMetric
           label="Em Execução"
-          value={active.length}
+          value={counts.active}
           icon={Clock3}
           tone="zinc"
+          selected={filters.status === "em_curso"}
+          onClick={() => changeFilter({ status: "em_curso" })}
         />
         <WorkMetric
-          label="Fora do Prazo/Limite"
-          value={overdue.length}
+          label="Fora do Prazo"
+          value={counts.overdue}
           icon={AlertTriangle}
           tone="red"
+          selected={filters.status === "atrasados"}
+          onClick={() => changeFilter({ status: "atrasados" })}
         />
         <WorkMetric
           label="Concluídos"
-          value={completed.length}
+          value={counts.completed}
           icon={CheckCircle2}
           tone="emerald"
+          selected={filters.status === "concluido"}
+          onClick={() => changeFilter({ status: "concluido" })}
         />
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-                EM CURSO
-              </p>
-              <h2 className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-                Fila de Trabalhos
-              </h2>
-            </div>
-            <Badge className="border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-              {active.length}
-            </Badge>
+      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        {/* Filtros */}
+        <div className="space-y-3 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
+          <div className="flex flex-wrap gap-1.5">
+            {STATUS_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => changeFilter({ status: option.value })}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  filters.status === option.value
+                    ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
+                    : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
-          {loading ? (
-            <LoadingState />
-          ) : active.length ? (
-            <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {active.map((job) => (
+
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+              <Input
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="Pesquisar por título, referência, rastreio ou departamento"
+                className="pl-9"
+              />
+            </div>
+            <select
+              value={filters.tipo}
+              onChange={(e) =>
+                changeFilter({ tipo: e.target.value as typeof filters.tipo })
+              }
+              className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              <option value="todos">Tipo e não tipo</option>
+              <option value="tipo">Só trabalhos tipo</option>
+              <option value="nao_tipo">Só trabalhos não tipo</option>
+            </select>
+            <select
+              value={filters.assigneeId}
+              onChange={(e) => changeFilter({ assigneeId: e.target.value })}
+              className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              <option value="">Todos os funcionários</option>
+              {users.map((u: any) => (
+                <option key={u.id} value={u.id}>
+                  {u.nome}
+                </option>
+              ))}
+            </select>
+            {hasActiveFilters && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={clearFilters}
+                className="h-9 text-zinc-500"
+              >
+                <X className="mr-1.5 h-4 w-4" />
+                Limpar
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Lista */}
+        {loading ? (
+          <LoadingState />
+        ) : jobs.length ? (
+          <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            {jobs.map((job) =>
+              job.status === "concluido" ? (
+                <CompletedJob key={job.id} job={job} />
+              ) : (
                 <ActiveJob
                   key={job.id}
                   job={job}
@@ -456,37 +584,54 @@ export function JobsPage() {
                   }}
                   onDelete={() => handleDeleteJob(job.id)}
                 />
-              ))}
-            </div>
-          ) : (
-            <EmptyWork text="Não existem trabalhos em execução." />
-          )}
-        </div>
-
-        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-                HISTÓRICO
-              </p>
-              <h2 className="mt-1 text-lg font-semibold text-zinc-900 dark:text-zinc-50">
-                Relatórios Concluídos
-              </h2>
-            </div>
-            <FileCheck2 className="h-5 w-5 text-emerald-500" />
+              ),
+            )}
           </div>
-          {loading ? (
-            <LoadingState />
-          ) : completed.length ? (
-            <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {completed.slice(0, 8).map((job) => (
-                <CompletedJob key={job.id} job={job} />
-              ))}
+        ) : (
+          <EmptyWork
+            text={
+              hasActiveFilters
+                ? "Nenhum trabalho corresponde aos filtros. Experimenta limpar a pesquisa."
+                : "Não há trabalhos neste estado."
+            }
+          />
+        )}
+
+        {/* Paginação */}
+        {total > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 px-5 py-3 dark:border-zinc-800">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              {firstShown}–{lastShown} de {total}
+            </p>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                <ChevronLeft className="mr-1 h-4 w-4" />
+                Anterior
+              </Button>
+              <span className="px-3 text-xs text-zinc-500 dark:text-zinc-400">
+                Página {page} de {totalPages}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={page >= totalPages || loading}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Seguinte
+                <ChevronRight className="ml-1 h-4 w-4" />
+              </Button>
             </div>
-          ) : (
-            <EmptyWork text="Os relatórios concluídos aparecerão aqui." />
-          )}
-        </div>
+          </div>
+        )}
       </section>
 
       <Dialog
@@ -502,7 +647,7 @@ export function JobsPage() {
               job={jobToComplete}
               overdue={isOverdue(jobToComplete)}
               onClose={() => setJobToComplete(null)}
-              onSaved={() => loadAll()}
+              onSaved={() => loadPage()}
             />
           )}
         </DialogContent>
@@ -516,11 +661,15 @@ function WorkMetric({
   value,
   icon: Icon,
   tone,
+  selected,
+  onClick,
 }: {
   label: string;
   value: number;
   icon: typeof Clock3;
   tone: "zinc" | "red" | "emerald";
+  selected: boolean;
+  onClick: () => void;
 }) {
   const colors = {
     zinc: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200",
@@ -529,7 +678,15 @@ function WorkMetric({
       "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400",
   };
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-white px-5 py-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex items-center gap-4 rounded-xl border bg-white px-5 py-4 text-left shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 dark:bg-zinc-900 ${
+        selected
+          ? "border-zinc-900 dark:border-zinc-100"
+          : "border-zinc-200 hover:border-zinc-300 dark:border-zinc-800 dark:hover:border-zinc-700"
+      }`}
+    >
       <div
         className={`grid h-10 w-10 place-items-center rounded-xl ${colors[tone]}`}
       >
@@ -541,7 +698,7 @@ function WorkMetric({
         </p>
         <p className="text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
       </div>
-    </div>
+    </button>
   );
 }
 

@@ -106,6 +106,7 @@ export const authAPI = {
       numero?: string;
       role?: string;
       ativo?: boolean;
+      nome_contabilidade?: string | null;
     },
   ) => {
     const { error } = await supabase
@@ -927,29 +928,132 @@ export const JOB_CHECKLIST_ITEMS = [
   { key: "testagem", label: "Testagem" },
 ] as const;
 
+export type JobStatusFilter =
+  "em_curso" | "atrasados" | "concluido" | "todos";
+
+export type JobFilters = {
+  status?: JobStatusFilter;
+  search?: string;
+  tipo?: "todos" | "tipo" | "nao_tipo";
+  assigneeId?: string;
+};
+
+const JOB_SELECT = `
+  *,
+  job_assignees ( user_id, users ( nome ) ),
+  job_checklist_items ( id, item_key, label, checked, checked_at )
+`;
+
+const mapJob = (job: any) => ({
+  ...job,
+  assignees: (job.job_assignees || []).map((ja: any) => ({
+    id: ja.user_id,
+    nome: ja.users?.nome,
+  })),
+  // linhas cruas; a ordem e os nomes vêm do JOB_CHECKLIST_ITEMS no frontend
+  checklist: job.job_checklist_items || [],
+});
+
 export const jobsAPI = {
+  // Mantido para outras páginas que possam precisar de todos os trabalhos
   getAll: async () => {
     const { data, error } = await supabase
       .from("jobs")
-      .select(
-        `
-        *,
-        job_assignees ( user_id, users ( nome ) ),
-        job_checklist_items ( id, item_key, label, checked, checked_at )
-      `,
-      )
+      .select(JOB_SELECT)
       .order("due_date", { ascending: true });
     if (error) throw error;
+    return (data || []).map(mapJob);
+  },
 
-    return (data || []).map((job: any) => ({
-      ...job,
-      assignees: (job.job_assignees || []).map((ja: any) => ({
-        id: ja.user_id,
-        nome: ja.users?.nome,
-      })),
-      // linhas cruas; a ordem e os nomes vêm do JOB_CHECKLIST_ITEMS no frontend
-      checklist: job.job_checklist_items || [],
-    }));
+  // Uma página de trabalhos, já filtrada na base de dados
+  getPage: async (
+    page: number,
+    pageSize: number,
+    filters: JobFilters = {},
+  ) => {
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+    const status = filters.status ?? "em_curso";
+
+    // Para filtrar por funcionário sem perder os outros funcionários do trabalho,
+    // junta-se a tabela job_assignees uma segunda vez só para o filtro.
+    const select = filters.assigneeId
+      ? `${JOB_SELECT}, filtro_funcionario:job_assignees!inner ( user_id )`
+      : JOB_SELECT;
+
+    let query = supabase
+      .from("jobs")
+      .select(select, { count: "exact" });
+
+    if (status === "em_curso") {
+      query = query.eq("status", "em_curso");
+    } else if (status === "atrasados") {
+      query = query
+        .eq("status", "em_curso")
+        .lt("due_date", new Date().toISOString());
+    } else if (status === "concluido") {
+      query = query.eq("status", "concluido");
+    }
+
+    if (filters.tipo === "tipo")
+      query = query.eq("non_standard", false);
+    if (filters.tipo === "nao_tipo")
+      query = query.eq("non_standard", true);
+
+    if (filters.assigneeId) {
+      query = query.eq(
+        "filtro_funcionario.user_id",
+        filters.assigneeId,
+      );
+    }
+
+    // Tira caracteres que partem a sintaxe do filtro .or() do Supabase
+    const search = (filters.search ?? "")
+      .replace(/[,()%*\\]/g, " ")
+      .trim();
+    if (search) {
+      const term = `%${search}%`;
+      query = query.or(
+        `title.ilike.${term},reference.ilike.${term},tracking_code.ilike.${term},department.ilike.${term}`,
+      );
+    }
+
+    query =
+      status === "concluido"
+        ? query.order("completed_at", { ascending: false })
+        : query.order("due_date", { ascending: true });
+
+    const { data, error, count } = await query.range(from, to);
+    if (error) throw error;
+
+    return {
+      jobs: (data || []).map(mapJob),
+      total: count ?? 0,
+    };
+  },
+
+  // Números dos cartões do topo, sem carregar os trabalhos
+  getCounts: async () => {
+    const now = new Date().toISOString();
+    const base = () =>
+      supabase
+        .from("jobs")
+        .select("id", { count: "exact", head: true });
+
+    const [active, overdue, completed] = await Promise.all([
+      base().eq("status", "em_curso"),
+      base().eq("status", "em_curso").lt("due_date", now),
+      base().eq("status", "concluido"),
+    ]);
+    if (active.error) throw active.error;
+    if (overdue.error) throw overdue.error;
+    if (completed.error) throw completed.error;
+
+    return {
+      active: active.count ?? 0,
+      overdue: overdue.count ?? 0,
+      completed: completed.count ?? 0,
+    };
   },
 
   create: async (job: {

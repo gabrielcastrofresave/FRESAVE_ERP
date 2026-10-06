@@ -615,7 +615,7 @@ function TaskForm({
                 : "border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
             }`}
           >
-            Manutenção
+            Assistência
           </button>
         </div>
       </div>
