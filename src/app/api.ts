@@ -914,7 +914,6 @@ export const stockAPI = {
 };
 
 // ==================== JOBS API ====================
-// Substitui este bloco inteiro no src/app/api.ts
 
 // Nomes das fases
 export const CHECKLIST_LABELS: Record<string, string> = {
@@ -1148,7 +1147,6 @@ export const jobsAPI = {
     };
   },
 
-  // dentro de jobsAPI:
   getAllReferenceTypes: async () => {
     const values = await getDistinctColumn("wintouch_tipo");
     return values.sort((a, b) => a.localeCompare(b, "pt"));
@@ -1369,75 +1367,130 @@ export const jobsAPI = {
   },
 };
 
+// ==================== CÁLCULO DE HORAS ====================
+
+// Pausas de lanche (minutos desde a meia-noite) que não contam
+const PAUSAS_LANCHE: [number, number][] = [
+  [10 * 60 + 30, 10 * 60 + 40], // 10:30–10:40
+  [16 * 60, 16 * 60 + 10], // 16:00–16:10
+];
+
+function toMin(t?: string | null): number | null {
+  if (!t) return null;
+  const [h, m] = t.slice(0, 5).split(":").map(Number);
+  return Number.isNaN(h) || Number.isNaN(m) ? null : h * 60 + m;
+}
+
+// Horas líquidas (sem pausas de lanche nem almoço), arredondadas a 2 casas.
+// Usado SÓ ao gravar um registo.
+function netHours(
+  inicio?: string | null,
+  fim?: string | null,
+  almocoMin?: number | null,
+): number | null {
+  const a = toMin(inicio);
+  const b = toMin(fim);
+  if (a === null || b === null || b <= a) return null;
+  const pausas = PAUSAS_LANCHE.reduce(
+    (acc, [p1, p2]) =>
+      acc + Math.max(0, Math.min(b, p2) - Math.max(a, p1)),
+    0,
+  );
+  const mins = Math.max(0, b - a - pausas - (almocoMin ?? 0));
+  return Math.round((mins / 60) * 100) / 100;
+}
+
+// Leitura de horas de uma linha: usa o valor guardado; se não houver
+// (registos antigos / Wintouch), mantém o cálculo antigo (bruto)
+function rowHours(r: any): number {
+  if (r.horas_liquidas != null) return Number(r.horas_liquidas);
+  const a = toMin(r.hora_inicio);
+  const b = toMin(r.hora_fim);
+  if (a === null || b === null) return 0;
+  return Math.max(0, (b - a) / 60);
+}
+
 // ==================== PRODUCTION TASKS API ====================
 // getAll() devolve uma linha por ATRIBUIÇÃO (assignee), já com os dados
-// do registo "pai" juntos — assim o resto da app continua a trabalhar
-// com uma lista "achatada", como antes.
+// do registo "pai" juntos.
 export const productionTasksAPI = {
-  getAll: async () => {
-    const { data, error } = await supabase.from(
-      "production_task_assignees",
-    ).select(`
-        id, task_id, user_id, hora_inicio, hora_fim, status,
+  getAll: async (from?: string, to?: string) => {
+    const buildQuery = () => {
+      let q = supabase.from("production_task_assignees")
+        .select(`
+        id, task_id, user_id, hora_inicio, hora_fim, almoco_minutos, horas_liquidas,
+        wintouch_custo, wintouch_nome,
         users ( nome ),
-        production_tasks (
-          tipo, job_id, titulo, cliente_obra, local, data, created_by,
+        production_tasks!inner (
+          tipo, job_id, titulo, cliente_obra, local, data, created_by, origem_wintouch,
           jobs ( title )
         )
       `);
-    if (error) throw error;
+      if (from) q = q.gte("production_tasks.data", from);
+      if (to) q = q.lte("production_tasks.data", to);
+      return q.order("data", {
+        referencedTable: "production_tasks",
+        ascending: false,
+      });
+    };
 
-    return (data || [])
-      .map((row: any) => ({
-        id: row.id,
-        task_id: row.task_id,
-        user_id: row.user_id,
-        hora_inicio: row.hora_inicio,
-        hora_fim: row.hora_fim,
-        status: row.status,
-        users: row.users,
-        tipo: row.production_tasks?.tipo,
-        job_id: row.production_tasks?.job_id,
-        titulo:
-          row.production_tasks?.tipo === "producao"
-            ? row.production_tasks?.jobs?.title
-            : row.production_tasks?.titulo,
-        cliente_obra: row.production_tasks?.cliente_obra,
-        local: row.production_tasks?.local,
-        data: row.production_tasks?.data,
-        created_by: row.production_tasks?.created_by,
-      }))
-      .sort((a, b) =>
-        String(a.data ?? "").localeCompare(
-          String(b.data ?? ""),
-        ),
+    // O Supabase devolve no máximo 1000 linhas por pedido: pagina até acabar
+    const PAGE = 1000;
+    const all: any[] = [];
+    for (let inicio = 0; ; inicio += PAGE) {
+      const { data, error } = await buildQuery().range(
+        inicio,
+        inicio + PAGE - 1,
       );
+      if (error) throw error;
+      all.push(...(data || []));
+      if (!data || data.length < PAGE) break;
+    }
+
+    return all.map((row: any) => ({
+      id: row.id,
+      task_id: row.task_id,
+      user_id: row.user_id,
+      hora_inicio: row.hora_inicio,
+      hora_fim: row.hora_fim,
+      almoco_minutos: row.almoco_minutos,
+      horas_liquidas: row.horas_liquidas,
+      wintouch_custo: row.wintouch_custo,
+      wintouch_nome: row.wintouch_nome,
+      users: row.users,
+      tipo: row.production_tasks?.tipo,
+      job_id: row.production_tasks?.job_id,
+      titulo:
+        row.production_tasks?.titulo ||
+        row.production_tasks?.jobs?.title ||
+        "(sem título)",
+      cliente_obra: row.production_tasks?.cliente_obra,
+      local: row.production_tasks?.local,
+      data: row.production_tasks?.data,
+      created_by: row.production_tasks?.created_by,
+      origem_wintouch: row.production_tasks?.origem_wintouch,
+    }));
   },
 
-  // Cria o registo "pai" + uma linha de atribuição por cada utilizador selecionado
   create: async (task: {
-    tipo: "producao" | "manutencao";
     jobId?: string | null;
-    titulo?: string;
+    titulo: string;
     clienteObra?: string;
     local?: string;
     data: string;
     createdBy: string;
     assigneeIds: string[];
+    horaInicio?: string;
+    horaFim?: string;
+    almocoMinutos?: number;
   }) => {
     const { data: created, error } = await supabase
       .from("production_tasks")
       .insert([
         {
-          tipo: task.tipo,
-          job_id:
-            task.tipo === "producao"
-              ? task.jobId || null
-              : null,
-          titulo:
-            task.tipo === "manutencao"
-              ? task.titulo || null
-              : null,
+          tipo: task.jobId ? "producao" : "manutencao",
+          job_id: task.jobId || null,
+          titulo: task.titulo || null,
           cliente_obra: task.clienteObra || null,
           local: task.local || null,
           data: task.data,
@@ -1452,7 +1505,14 @@ export const productionTasksAPI = {
       const payload = task.assigneeIds.map((userId) => ({
         task_id: created.id,
         user_id: userId,
-        status: "pendente",
+        hora_inicio: task.horaInicio || null,
+        hora_fim: task.horaFim || null,
+        almoco_minutos: task.almocoMinutos ?? null,
+        horas_liquidas: netHours(
+          task.horaInicio,
+          task.horaFim,
+          task.almocoMinutos,
+        ),
       }));
       const { error: assigneesError } = await supabase
         .from("production_task_assignees")
@@ -1462,13 +1522,36 @@ export const productionTasksAPI = {
     return created;
   },
 
-  // Atualiza SÓ a atribuição de um utilizador (as suas horas/status)
+  // Atualiza o registo "pai" (título, trabalho, data)
+  updateTask: async (
+    taskId: string,
+    data: {
+      titulo?: string;
+      jobId?: string | null;
+      data?: string;
+    },
+  ) => {
+    const payload: any = {};
+    if (data.titulo !== undefined)
+      payload.titulo = data.titulo || null;
+    if (data.jobId !== undefined)
+      payload.job_id = data.jobId || null;
+    if (data.data !== undefined) payload.data = data.data;
+
+    const { error } = await supabase
+      .from("production_tasks")
+      .update(payload)
+      .eq("id", taskId);
+    if (error) throw error;
+  },
+
+  // Atualiza horas e almoço da atribuição e recalcula as horas líquidas
   updateAssignee: async (
     assigneeId: string,
     data: {
       horaInicio?: string;
       horaFim?: string;
-      status?: string;
+      almocoMinutos?: number;
     },
   ) => {
     const payload: any = {};
@@ -1476,7 +1559,18 @@ export const productionTasksAPI = {
       payload.hora_inicio = data.horaInicio;
     if (data.horaFim !== undefined)
       payload.hora_fim = data.horaFim;
-    if (data.status !== undefined) payload.status = data.status;
+    if (data.almocoMinutos !== undefined)
+      payload.almoco_minutos = data.almocoMinutos;
+    if (
+      data.horaInicio !== undefined &&
+      data.horaFim !== undefined
+    ) {
+      payload.horas_liquidas = netHours(
+        data.horaInicio,
+        data.horaFim,
+        data.almocoMinutos,
+      );
+    }
 
     const { error } = await supabase
       .from("production_task_assignees")
@@ -1494,7 +1588,6 @@ export const productionTasksAPI = {
   },
 
   deleteTask: async (taskId: string) => {
-    // apaga o registo "pai" — as atribuições vão atrás por causa do "on delete cascade"
     const { error } = await supabase
       .from("production_tasks")
       .delete()
@@ -1503,8 +1596,8 @@ export const productionTasksAPI = {
   },
 };
 
-// Calcula horas consumidas por um trabalho: soma de horas de todas as
-// atribuições ligadas a ele (cada pessoa conta as suas próprias horas).
+// Horas consumidas por um trabalho: soma das horas de todas as atribuições
+// ligadas a ele. Só lê o valor guardado (ou o cálculo antigo se não houver).
 export function calcJobHoursConsumed(
   job: { id: string },
   allAssignees: any[],
@@ -1514,15 +1607,11 @@ export function calcJobHoursConsumed(
       (t: any) =>
         t.job_id === job.id && t.hora_inicio && t.hora_fim,
     )
-    .reduce((sum: number, t: any) => {
-      const [h1, m1] = t.hora_inicio.split(":").map(Number);
-      const [h2, m2] = t.hora_fim.split(":").map(Number);
-      const hours = h2 + m2 / 60 - (h1 + m1 / 60);
-      return sum + Math.max(0, hours);
-    }, 0);
+    .reduce((sum: number, t: any) => sum + rowHours(t), 0);
 }
 
 // ==================== CONTABILIDADE ====================
+
 export const accountingAPI = {
   // Custo de peças: soma de levantamentos de stock atribuídos a este job
   getPartsForJob: async (jobId: string) => {
@@ -1549,7 +1638,7 @@ export const accountingAPI = {
       .from("production_task_assignees")
       .select(
         `
-      id, user_id, hora_inicio, hora_fim, status,
+      id, user_id, hora_inicio, hora_fim, horas_liquidas,
       users ( nome ),
       production_tasks!inner ( job_id, data ),
       job_hour_rates ( rate_per_hour )
@@ -1561,9 +1650,7 @@ export const accountingAPI = {
     if (error) throw error;
 
     return (data || []).map((r: any) => {
-      const [h1, m1] = r.hora_inicio.split(":").map(Number);
-      const [h2, m2] = r.hora_fim.split(":").map(Number);
-      const hours = Math.max(0, h2 + m2 / 60 - (h1 + m1 / 60));
+      const hours = rowHours(r);
       const rateRaw = r.job_hour_rates;
       const rate =
         Number(
@@ -1677,23 +1764,6 @@ export const wintouchAPI = {
           "x-current-enterprise": WINTOUCH_ENTERPRISE,
           Accept: "application/json",
         },
-      },
-    );
-    return response.json();
-  },
-
-  //------------WINTOUCH API-----------------------------------------------------------
-  saveWork: async (token: string, data: any) => {
-    const response = await fetch(
-      `${WINTOUCH_BASE_URL}/data_import/entities`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "x-current-enterprise": WINTOUCH_ENTERPRISE,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify([data]),
       },
     );
     return response.json();
