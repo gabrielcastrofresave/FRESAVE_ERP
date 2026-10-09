@@ -45,11 +45,11 @@ import {
 const PAGE_SIZE = 10;
 
 export const DEPARTMENTS = [
-  "FÁBRICA",
+  "FABRICA",
   "OFICINA",
   "LOJA",
-  "MAQUINAÇÃO",
-  "ASSISTÊNCIA",
+  "MAQUINACAO",
+  "ASSISTENCIA",
 ] as const;
 export type Department = (typeof DEPARTMENTS)[number];
 
@@ -66,10 +66,34 @@ const STATUS_OPTIONS: {
   { value: "todos", label: "Todos" },
 ];
 
+const extractReferenceType = (reference: string): string => {
+  if (!reference) return "";
+
+  const parts = reference.trim().split("/");
+  return parts[0]?.toUpperCase() || "";
+};
+
+const extractReferenceYear = (reference: string): string => {
+  if (!reference) return "";
+
+  const parts = reference.trim().split("/");
+  return parts[1] || "";
+};
+
+const extractReferenceNumber = (reference: string): string => {
+  if (!reference) return "";
+
+  const parts = reference.trim().split("/");
+  return parts[2] || "";
+};
+
 const DEFAULT_FILTERS: Required<JobFilters> = {
   status: "em_curso",
   search: "",
-  tipo: "todos",
+  referenceType: "",
+  referenceYear: "",
+  referenceNumber: "",
+  department: "todos",
   assigneeId: "",
 };
 
@@ -277,17 +301,22 @@ function downloadReportDoc(job: any) {
 export function JobsPage() {
   const { users, currentUser } = useApp();
   const [jobs, setJobs] = useState<any[]>([]);
-  const [total, setTotal] = useState(0);
-  const [counts, setCounts] = useState({
-    active: 0,
-    overdue: 0,
-    completed: 0,
-  });
+  const [availableRefTypes, setAvailableRefTypes] = useState<
+    string[]
+  >([]);
+  const [availableRefSuffixes, setAvailableRefSuffixes] =
+    useState<string[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [searchInput, setSearchInput] = useState("");
+  const [total, setTotal] = useState<number>(0);
+  const [counts, setCounts] = useState({
+    active: 0,
+    overdue: 0,
+    completed: 0,
+  });
   const [createOpen, setCreateOpen] = useState(false);
   const [editingJob, setEditingJob] = useState<any | null>(
     null,
@@ -295,6 +324,7 @@ export function JobsPage() {
   const [jobToComplete, setJobToComplete] = useState<
     any | null
   >(null);
+
   const requestId = useRef(0);
   const [jobToDelete, setJobToDelete] = useState<any | null>(
     null,
@@ -307,8 +337,31 @@ export function JobsPage() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hasActiveFilters =
     filters.search !== "" ||
-    filters.tipo !== "todos" ||
+    filters.referenceType !== "" ||
+    filters.referenceYear !== "" ||
+    filters.referenceNumber !== "" ||
+    filters.department !== "todos" ||
     filters.assigneeId !== "";
+
+  useEffect(() => {
+    const loadFilterOptions = async () => {
+      try {
+        const [types, years] = await Promise.all([
+          jobsAPI.getAllReferenceTypes(),
+          jobsAPI.getAllReferenceYears(),
+        ]);
+
+        setAvailableRefTypes(types);
+        setAvailableRefSuffixes(years);
+      } catch (error) {
+        console.error(
+          "Erro ao carregar opções de filtro:",
+          error,
+        );
+      }
+    };
+    loadFilterOptions();
+  }, []);
 
   const loadTasks = async () => {
     try {
@@ -326,11 +379,21 @@ export function JobsPage() {
         jobsAPI.getPage(page, PAGE_SIZE, {
           status: filters.status,
           search: filters.search || undefined,
-          tipo: filters.tipo,
+
+          referenceType: filters.referenceType || undefined,
+
+          referenceYear: filters.referenceYear || undefined,
+
+          referenceNumber: filters.referenceNumber || undefined,
+
+          department:
+            filters.department !== "todos"
+              ? filters.department
+              : undefined,
+
           assigneeId: filters.assigneeId || undefined,
-          // ✅ IMPORTANTE: Filtra eliminados
-          excludeDeleted: true,
         }),
+
         jobsAPI.getCounts(),
       ]);
 
@@ -575,31 +638,76 @@ export function JobsPage() {
             ))}
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto_auto_auto_auto]">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
               <Input
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Pesquisar por título, referência, rastreio ou departamento"
+                placeholder="Pesquisar por título ou rastreio"
                 className="pl-9"
               />
             </div>
+
             <select
-              value={filters.tipo}
+              value={filters.referenceType}
               onChange={(e) =>
                 changeFilter({
-                  tipo: e.target.value as typeof filters.tipo,
+                  referenceType: e.target.value,
                 })
               }
               className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
             >
-              <option value="todos">Tipo e não tipo</option>
-              <option value="tipo">Só trabalhos tipo</option>
-              <option value="nao_tipo">
-                Só trabalhos não tipo
-              </option>
+              <option value="">Tipo de Ref.</option>
+              {availableRefTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
             </select>
+
+            <select
+              value={filters.referenceYear}
+              onChange={(e) =>
+                changeFilter({
+                  referenceYear: e.target.value,
+                })
+              }
+              className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              <option value="">Ano</option>
+
+              {availableRefSuffixes.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+            <Input
+              value={filters.referenceNumber}
+              onChange={(e) =>
+                changeFilter({
+                  referenceNumber: e.target.value,
+                })
+              }
+              placeholder="N.º interno"
+              className="h-9"
+            />
+            <select
+              value={filters.department}
+              onChange={(e) =>
+                changeFilter({ department: e.target.value })
+              }
+              className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              <option value="todos">Todos Depart.</option>
+              {DEPARTMENTS.map((dept) => (
+                <option key={dept} value={dept}>
+                  {dept}
+                </option>
+              ))}
+            </select>
+
             <select
               value={filters.assigneeId}
               onChange={(e) =>
@@ -607,13 +715,14 @@ export function JobsPage() {
               }
               className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
             >
-              <option value="">Todos os funcionários</option>
+              <option value="">Todos Func.</option>
               {users.map((u: any) => (
                 <option key={u.id} value={u.id}>
                   {u.nome}
                 </option>
               ))}
             </select>
+
             {hasActiveFilters && (
               <Button
                 type="button"
@@ -722,6 +831,24 @@ export function JobsPage() {
           )}
         </DialogContent>
       </Dialog>
+      <Dialog
+        open={Boolean(jobToComplete)}
+        onOpenChange={(open) => !open && setJobToComplete(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Concluir Trabalho</DialogTitle>
+          </DialogHeader>
+          {jobToComplete && (
+            <CompletionForm
+              job={jobToComplete}
+              overdue={isOverdue(jobToComplete)}
+              onClose={() => setJobToComplete(null)}
+              onSaved={() => loadPage()}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -820,8 +947,7 @@ function ActiveJob({
   const totalCount = stages.length;
 
   const hasNoChecklist =
-    DEPARTMENT_CHECKLIST_MAP[job.department as Department] ===
-    null;
+    !DEPARTMENT_CHECKLIST_MAP[job.department as Department];
 
   return (
     <div className="p-5">

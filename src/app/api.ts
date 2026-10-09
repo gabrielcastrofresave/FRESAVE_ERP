@@ -914,7 +914,6 @@ export const stockAPI = {
 };
 
 // ==================== JOBS API ====================
-// ==================== JOBS API ====================
 // Substitui este bloco inteiro no src/app/api.ts
 
 // Nomes das fases
@@ -936,7 +935,7 @@ export const DEPARTMENT_CHECKLIST_MAP: Record<
   string,
   string[] | null
 > = {
-  FÁBRICA: [
+  FABRICA: [
     "planning",
     "setup",
     "execution",
@@ -963,8 +962,8 @@ export const DEPARTMENT_CHECKLIST_MAP: Record<
     "delivery",
     "documentation",
   ],
-  MAQUINAÇÃO: ["projeto", "montagem", "testagem"],
-  ASSISTÊNCIA: null,
+  MAQUINACAO: ["projeto", "montagem", "testagem"],
+  ASSISTENCIA: null,
 };
 
 // Fases que um departamento exige (lista vazia = nenhuma)
@@ -993,7 +992,10 @@ export type JobStatusFilter =
 export type JobFilters = {
   status?: JobStatusFilter;
   search?: string;
-  tipo?: "todos" | "tipo" | "nao_tipo";
+  referenceType?: string;
+  referenceYear?: string;
+  referenceNumber?: string;
+  department?: string;
   assigneeId?: string;
 };
 
@@ -1011,6 +1013,24 @@ const mapJob = (job: any) => ({
   })),
   checklist: job.job_checklist_items || [],
 });
+// Valores distintos de uma coluna (sem nulos nem vazios)
+const getDistinctColumn = async (
+  column: string,
+): Promise<string[]> => {
+  const { data, error } = await supabase
+    .from("jobs")
+    .select(column)
+    .is("deleted_at", null)
+    .not(column, "is", null);
+  if (error) throw error;
+
+  const values = new Set(
+    (data || [])
+      .map((row: any) => row[column])
+      .filter((v) => v !== null && String(v).trim() !== ""),
+  );
+  return Array.from(values).map((v) => String(v));
+};
 
 export const jobsAPI = {
   // Todos os trabalhos ativos (sem os eliminados)
@@ -1024,7 +1044,6 @@ export const jobsAPI = {
     return (data || []).map(mapJob);
   },
 
-  // Uma página de trabalhos, já filtrada na base de dados
   getPage: async (
     page: number,
     pageSize: number,
@@ -1034,8 +1053,6 @@ export const jobsAPI = {
     const to = from + pageSize - 1;
     const status = filters.status ?? "em_curso";
 
-    // Para filtrar por funcionário sem perder os outros funcionários do trabalho,
-    // junta-se a tabela job_assignees uma segunda vez só para o filtro.
     const select = filters.assigneeId
       ? `${JOB_SELECT}, filtro_funcionario:job_assignees!inner ( user_id )`
       : JOB_SELECT;
@@ -1055,10 +1072,24 @@ export const jobsAPI = {
       query = query.eq("status", "concluido");
     }
 
-    if (filters.tipo === "tipo")
-      query = query.eq("non_standard", false);
-    if (filters.tipo === "nao_tipo")
-      query = query.eq("non_standard", true);
+    if (filters.referenceType) {
+      query = query.eq("wintouch_tipo", filters.referenceType);
+    }
+
+    if (filters.referenceYear) {
+      query = query.eq("wintouch_serie", filters.referenceYear);
+    }
+
+    if (filters.referenceNumber) {
+      query = query.eq(
+        "wintouch_numdoc",
+        filters.referenceNumber.trim(),
+      );
+    }
+
+    if (filters.department && filters.department !== "todos") {
+      query = query.eq("department", filters.department);
+    }
 
     if (filters.assigneeId) {
       query = query.eq(
@@ -1115,6 +1146,19 @@ export const jobsAPI = {
       overdue: overdue.count ?? 0,
       completed: completed.count ?? 0,
     };
+  },
+
+  // dentro de jobsAPI:
+  getAllReferenceTypes: async () => {
+    const values = await getDistinctColumn("wintouch_tipo");
+    return values.sort((a, b) => a.localeCompare(b, "pt"));
+  },
+
+  getAllReferenceYears: async () => {
+    const values = await getDistinctColumn("wintouch_serie");
+    return values.sort((a, b) =>
+      b.localeCompare(a, "pt", { numeric: true }),
+    );
   },
 
   create: async (job: {
@@ -1331,32 +1375,43 @@ export const jobsAPI = {
 // com uma lista "achatada", como antes.
 export const productionTasksAPI = {
   getAll: async () => {
-    const { data, error } = await supabase
-      .from("jobs")
-      .select(JOB_SELECT)
-      .is("deleted_at", null)
-      .order("due_date", { ascending: true });
+    const { data, error } = await supabase.from(
+      "production_task_assignees",
+    ).select(`
+        id, task_id, user_id, hora_inicio, hora_fim, status,
+        users ( nome ),
+        production_tasks (
+          tipo, job_id, titulo, cliente_obra, local, data, created_by,
+          jobs ( title )
+        )
+      `);
     if (error) throw error;
 
-    return (data || []).map((row: any) => ({
-      id: row.id,
-      task_id: row.task_id,
-      user_id: row.user_id,
-      hora_inicio: row.hora_inicio,
-      hora_fim: row.hora_fim,
-      status: row.status,
-      users: row.users,
-      tipo: row.production_tasks?.tipo,
-      job_id: row.production_tasks?.job_id,
-      titulo:
-        row.production_tasks?.tipo === "producao"
-          ? row.production_tasks?.jobs?.title
-          : row.production_tasks?.titulo,
-      cliente_obra: row.production_tasks?.cliente_obra,
-      local: row.production_tasks?.local,
-      data: row.production_tasks?.data,
-      created_by: row.production_tasks?.created_by,
-    }));
+    return (data || [])
+      .map((row: any) => ({
+        id: row.id,
+        task_id: row.task_id,
+        user_id: row.user_id,
+        hora_inicio: row.hora_inicio,
+        hora_fim: row.hora_fim,
+        status: row.status,
+        users: row.users,
+        tipo: row.production_tasks?.tipo,
+        job_id: row.production_tasks?.job_id,
+        titulo:
+          row.production_tasks?.tipo === "producao"
+            ? row.production_tasks?.jobs?.title
+            : row.production_tasks?.titulo,
+        cliente_obra: row.production_tasks?.cliente_obra,
+        local: row.production_tasks?.local,
+        data: row.production_tasks?.data,
+        created_by: row.production_tasks?.created_by,
+      }))
+      .sort((a, b) =>
+        String(a.data ?? "").localeCompare(
+          String(b.data ?? ""),
+        ),
+      );
   },
 
   // Cria o registo "pai" + uma linha de atribuição por cada utilizador selecionado
@@ -1489,38 +1544,37 @@ export const accountingAPI = {
   },
 
   // Linhas de horas: atribuições de produção ligadas a este job + a taxa gravada (se existir)
-  getHourLinesForJob: async (
-    jobId: string,
-    allAssigneeRows: any[],
-  ) => {
-    const rows = allAssigneeRows.filter(
-      (r: any) =>
-        r.job_id === jobId && r.hora_inicio && r.hora_fim,
-    );
-    const ids = rows.map((r: any) => r.id);
-    let rates: Record<string, number> = {};
-    if (ids.length > 0) {
-      const { data, error } = await supabase
-        .from("job_hour_rates")
-        .select("*")
-        .in("task_assignee_id", ids);
-      if (error) throw error;
-      rates = Object.fromEntries(
-        (data || []).map((r: any) => [
-          r.task_assignee_id,
-          r.rate_per_hour,
-        ]),
-      );
-    }
-    return rows.map((r: any) => {
+  getHourLinesForJob: async (jobId: string) => {
+    const { data, error } = await supabase
+      .from("production_task_assignees")
+      .select(
+        `
+      id, user_id, hora_inicio, hora_fim, status,
+      users ( nome ),
+      production_tasks!inner ( job_id, data ),
+      job_hour_rates ( rate_per_hour )
+    `,
+      )
+      .eq("production_tasks.job_id", jobId)
+      .not("hora_inicio", "is", null)
+      .not("hora_fim", "is", null);
+    if (error) throw error;
+
+    return (data || []).map((r: any) => {
       const [h1, m1] = r.hora_inicio.split(":").map(Number);
       const [h2, m2] = r.hora_fim.split(":").map(Number);
       const hours = Math.max(0, h2 + m2 / 60 - (h1 + m1 / 60));
-      const rate = rates[r.id] || 0;
+      const rateRaw = r.job_hour_rates;
+      const rate =
+        Number(
+          Array.isArray(rateRaw)
+            ? rateRaw[0]?.rate_per_hour
+            : rateRaw?.rate_per_hour,
+        ) || 0;
       return {
         id: r.id,
         user_nome: r.users?.nome || "-",
-        data: r.data,
+        data: r.production_tasks?.data,
         hours,
         rate,
         subtotal: hours * rate,

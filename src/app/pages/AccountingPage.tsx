@@ -22,7 +22,6 @@ import { Badge } from "../components/ui/badge";
 import {
   ShieldAlert,
   Loader2,
-  Wrench,
   Clock3,
   Package,
   Plus,
@@ -30,7 +29,15 @@ import {
   Download,
   FileText,
   Calculator,
+  Search,
+  X,
 } from "lucide-react";
+
+const PAGE_SIZE = 50;
+
+type StatusFilter = "todos" | "em_curso" | "concluido";
+type SortOption =
+  "recentes" | "antigos" | "titulo" | "referencia";
 
 function formatEuro(value: number) {
   return `${value.toFixed(2)} €`;
@@ -39,6 +46,21 @@ function formatEuro(value: number) {
 function formatDatePt(value: string | null | undefined) {
   if (!value) return "-";
   return new Date(value).toLocaleDateString("pt-PT");
+}
+
+// Pesquisa sem acentos e sem maiúsculas ("maquina" encontra "Máquina")
+function normalize(value: unknown) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+function jobDate(job: any): number {
+  const raw = job.created_at || job.data_inicio || job.date;
+  const t = raw ? new Date(raw).getTime() : NaN;
+  return Number.isNaN(t) ? 0 : t;
 }
 
 function downloadCsv(
@@ -77,11 +99,130 @@ function downloadCsv(
 
 export function AccountingPage() {
   const { currentUser } = useApp();
+  const hasAccess =
+    currentUser?.role === "administrador" ||
+    currentUser?.role === "escritorio";
 
-  if (
-    currentUser?.role !== "administrador" &&
-    currentUser?.role !== "escritorio"
-  ) {
+  const [jobs, setJobs] = useState<any[]>([]);
+  const [assigneeRows, setAssigneeRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedJobId, setSelectedJobId] =
+    useState<string>("");
+
+  // Filtros
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] =
+    useState<StatusFilter>("todos");
+  const [sortBy, setSortBy] = useState<SortOption>("recentes");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  const loadJobs = async () => {
+    setLoading(true);
+    try {
+      const [jobsData, rowsData] = await Promise.all([
+        jobsAPI.getAll(),
+        productionTasksAPI.getAll(),
+      ]);
+      setJobs(jobsData);
+      setAssigneeRows(rowsData);
+      setSelectedJobId((current) =>
+        current && jobsData.some((j: any) => j.id === current)
+          ? current
+          : "",
+      );
+    } catch (error) {
+      console.error("Erro ao carregar projetos:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (hasAccess) loadJobs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasAccess]);
+
+  // Volta ao início da lista sempre que um filtro muda
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [search, statusFilter, sortBy]);
+
+  const statusCounts = useMemo(() => {
+    const concluido = jobs.filter(
+      (j) => j.status === "concluido",
+    ).length;
+    return {
+      todos: jobs.length,
+      concluido,
+      em_curso: jobs.length - concluido,
+    };
+  }, [jobs]);
+
+  const filteredJobs = useMemo(() => {
+    const term = normalize(search);
+
+    const result = jobs
+      .map((job, index) => ({ job, index }))
+      .filter(({ job }) => {
+        if (
+          statusFilter === "concluido" &&
+          job.status !== "concluido"
+        )
+          return false;
+        if (
+          statusFilter === "em_curso" &&
+          job.status === "concluido"
+        )
+          return false;
+        if (!term) return true;
+        return (
+          normalize(job.title).includes(term) ||
+          normalize(job.reference).includes(term)
+        );
+      });
+
+    result.sort((a, b) => {
+      switch (sortBy) {
+        case "titulo":
+          return String(a.job.title ?? "").localeCompare(
+            String(b.job.title ?? ""),
+            "pt",
+          );
+        case "referencia":
+          return String(a.job.reference ?? "").localeCompare(
+            String(b.job.reference ?? ""),
+            "pt",
+            { numeric: true },
+          );
+        case "antigos":
+          return (
+            jobDate(a.job) - jobDate(b.job) || b.index - a.index
+          );
+        case "recentes":
+        default:
+          return (
+            jobDate(b.job) - jobDate(a.job) || a.index - b.index
+          );
+      }
+    });
+
+    return result.map((r) => r.job);
+  }, [jobs, search, statusFilter, sortBy]);
+
+  const visibleJobs = filteredJobs.slice(0, visibleCount);
+  const hasActiveFilters =
+    search.trim() !== "" || statusFilter !== "todos";
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("todos");
+  };
+
+  const selectedJob = jobs.find(
+    (j: any) => j.id === selectedJobId,
+  );
+
+  if (!hasAccess) {
     return (
       <div className="mx-auto flex max-w-md flex-col items-center gap-3 py-24 text-center">
         <ShieldAlert className="h-10 w-10 text-zinc-300" />
@@ -96,203 +237,11 @@ export function AccountingPage() {
     );
   }
 
-  const [jobs, setJobs] = useState<any[]>([]);
-  const [assigneeRows, setAssigneeRows] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedJobId, setSelectedJobId] =
-    useState<string>("");
-
-  const loadJobs = async () => {
-    setLoading(true);
-    try {
-      const [jobsData, rowsData] = await Promise.all([
-        jobsAPI.getAll(),
-        productionTasksAPI.getAll(),
-      ]);
-      setJobs(jobsData);
-      setAssigneeRows(rowsData);
-      if (!selectedJobId && jobsData.length > 0) {
-        setSelectedJobId(jobsData[0].id);
-      }
-    } catch (error) {
-      console.error("Erro ao carregar projetos:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadJobs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  // Adiciona esta função helper no topo do arquivo
-  function DeleteProjectDialog({
-    job,
-    onClose,
-    onDeleted,
-  }: {
-    job: any;
-    onClose: () => void;
-    onDeleted: () => void;
-  }) {
-    const [step, setStep] = useState<"initial" | "verify">(
-      "initial",
-    );
-    const [verificationText, setVerificationText] =
-      useState("");
-    const [loading, setLoading] = useState(false);
-
-    const canDelete =
-      job.status === "concluido" || job.status === "deleted";
-
-    const verificationRequired = job.title || job.reference;
-
-    const handleFirstConfirm = () => {
-      setStep("verify");
-    };
-
-    const handleDelete = async () => {
-      if (verificationText !== verificationRequired) {
-        alert(`Por favor, escreve: ${verificationRequired}`);
-        return;
-      }
-
-      setLoading(true);
-      try {
-        await jobsAPI.deleteJob(job.id);
-        alert("Projeto eliminado com sucesso.");
-        onDeleted();
-        onClose();
-      } catch (error) {
-        console.error("Erro ao eliminar projeto:", error);
-        alert("Erro ao eliminar projeto.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (!canDelete) {
-      return (
-        <div className="space-y-4">
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
-            <p className="text-sm text-amber-800 dark:text-amber-400">
-              Não é possível eliminar este projeto. Apenas
-              projetos concluídos podem ser eliminados.
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="inline-flex items-center justify-center rounded-lg bg-zinc-200 px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-300 dark:bg-zinc-700 dark:text-zinc-50 dark:hover:bg-zinc-600"
-          >
-            Fechar
-          </button>
-        </div>
-      );
-    }
-
-    if (step === "initial") {
-      return (
-        <div className="space-y-4">
-          <div className="rounded-lg border border-red-200 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/30">
-            <p className="text-sm font-medium text-red-900 dark:text-red-200">
-              Aviso: Esta ação é irreversível
-            </p>
-            <p className="mt-1 text-sm text-red-800 dark:text-red-300">
-              Ao eliminar este projeto, todos os seus dados
-              (peças, horas, custos) serão removidos
-              permanentemente.
-            </p>
-          </div>
-          <div>
-            <p className="mb-2 text-sm font-medium text-zinc-900 dark:text-zinc-50">
-              Tens a certeza que queres eliminar:
-            </p>
-            <p className="text-sm text-zinc-600 dark:text-zinc-300">
-              <strong>{job.title}</strong> ({job.reference})
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              className="flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleFirstConfirm}
-              className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-            >
-              Sim, quero eliminar
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="space-y-4">
-        <div className="rounded-lg border border-red-300 bg-red-100 p-3 dark:border-red-800 dark:bg-red-950/50">
-          <p className="text-sm font-bold text-red-900 dark:text-red-200">
-            ⚠ Confirmação Final Necessária
-          </p>
-        </div>
-        <div>
-          <Label
-            htmlFor="verification"
-            className="text-sm font-medium"
-          >
-            Escreve o título ou referência do projeto para
-            confirmar:
-          </Label>
-          <p className="mt-1 inline-block rounded bg-zinc-100 px-2 py-1 font-mono text-xs text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-            {verificationRequired}
-          </p>
-        </div>
-        <Input
-          id="verification"
-          type="text"
-          value={verificationText}
-          onChange={(e) => setVerificationText(e.target.value)}
-          placeholder="Escreve aqui..."
-          autoFocus
-          className="border-red-300"
-        />
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          Texto introduzido:{" "}
-          <span className="font-mono">
-            {verificationText || "(vazio)"}
-          </span>
-        </p>
-        <div className="flex gap-2">
-          <button
-            onClick={() => {
-              setStep("initial");
-              setVerificationText("");
-            }}
-            className="flex-1 rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 dark:hover:bg-zinc-700"
-          >
-            Voltar
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={
-              loading ||
-              verificationText !== verificationRequired
-            }
-            className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading && (
-              <Loader2 className="mr-2 inline h-3.5 w-3.5 animate-spin" />
-            )}
-            {loading ? "A eliminar..." : "Eliminar para sempre"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-  const selectedJob = jobs.find(
-    (j: any) => j.id === selectedJobId,
-  );
+  const statusTabs: { value: StatusFilter; label: string }[] = [
+    { value: "todos", label: "Todos" },
+    { value: "em_curso", label: "Em curso" },
+    { value: "concluido", label: "Concluídos" },
+  ];
 
   return (
     <div className="mx-auto max-w-7xl space-y-7">
@@ -309,14 +258,71 @@ export function AccountingPage() {
         </p>
       </header>
 
-      <section className="grid gap-5 lg:grid-cols-[280px_1fr]">
+      <section className="grid gap-5 lg:grid-cols-[320px_1fr]">
         {/* Lista de projetos */}
-        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
-              Projetos
-            </p>
+        <div className="flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]">
+          {/* Filtros */}
+          <div className="space-y-3 border-b border-zinc-100 p-3 dark:border-zinc-800">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Procurar por título ou referência"
+                className="h-9 pl-8 pr-8"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+                  aria-label="Limpar pesquisa"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-1 rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
+              {statusTabs.map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  onClick={() => setStatusFilter(tab.value)}
+                  className={`rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                    statusFilter === tab.value
+                      ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-900 dark:text-zinc-50"
+                      : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  {tab.label}
+                  <span className="ml-1 text-[10px] text-zinc-400">
+                    {statusCounts[tab.value]}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between gap-2">
+              <select
+                value={sortBy}
+                onChange={(e) =>
+                  setSortBy(e.target.value as SortOption)
+                }
+                className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-xs text-zinc-700 focus:outline-none focus:ring-2 focus:ring-red-500/30 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+                aria-label="Ordenar"
+              >
+                <option value="recentes">Mais recentes</option>
+                <option value="antigos">Mais antigos</option>
+                <option value="titulo">Título (A–Z)</option>
+                <option value="referencia">Referência</option>
+              </select>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                {filteredJobs.length} de {jobs.length}
+              </p>
+            </div>
           </div>
+
           {loading ? (
             <div className="flex min-h-32 items-center justify-center text-sm text-zinc-400">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />A
@@ -326,9 +332,22 @@ export function AccountingPage() {
             <p className="px-4 py-8 text-center text-sm text-zinc-400">
               Nenhum projeto encontrado.
             </p>
+          ) : filteredJobs.length === 0 ? (
+            <div className="px-4 py-8 text-center">
+              <p className="text-sm text-zinc-500">
+                Nenhum projeto corresponde aos filtros.
+              </p>
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="mt-2 text-xs font-medium text-red-600 hover:underline"
+              >
+                Limpar filtros
+              </button>
+            </div>
           ) : (
-            <div className="max-h-[32rem] divide-y divide-zinc-100 overflow-y-auto dark:divide-zinc-800">
-              {jobs.map((job: any) => (
+            <div className="min-h-0 flex-1 divide-y divide-zinc-100 overflow-y-auto dark:divide-zinc-800 max-lg:max-h-[28rem]">
+              {visibleJobs.map((job: any) => (
                 <button
                   key={job.id}
                   onClick={() => setSelectedJobId(job.id)}
@@ -347,22 +366,40 @@ export function AccountingPage() {
                   >
                     {job.title}
                   </p>
-                  <p className="mt-0.5 truncate font-mono text-[11px] text-zinc-400">
-                    {job.reference}
-                  </p>
-                  <Badge
-                    className={`mt-1.5 ${
-                      job.status === "concluido"
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400"
-                        : "border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
-                    }`}
-                  >
-                    {job.status === "concluido"
-                      ? "Concluído"
-                      : "Em Curso"}
-                  </Badge>
+                  <div className="mt-1 flex items-center justify-between gap-2">
+                    <p className="truncate font-mono text-[11px] text-zinc-400">
+                      {job.reference}
+                    </p>
+                    <Badge
+                      className={`shrink-0 ${
+                        job.status === "concluido"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400"
+                          : "border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                      }`}
+                    >
+                      {job.status === "concluido"
+                        ? "Concluído"
+                        : "Em Curso"}
+                    </Badge>
+                  </div>
                 </button>
               ))}
+
+              {filteredJobs.length > visibleCount && (
+                <div className="p-3">
+                  <Button
+                    variant="outline"
+                    className="h-8 w-full text-xs"
+                    onClick={() =>
+                      setVisibleCount((c) => c + PAGE_SIZE)
+                    }
+                  >
+                    Mostrar mais (
+                    {filteredJobs.length - visibleCount}{" "}
+                    restantes)
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -373,6 +410,10 @@ export function AccountingPage() {
             key={selectedJob.id}
             job={selectedJob}
             assigneeRows={assigneeRows}
+            onJobDeleted={() => {
+              setSelectedJobId("");
+              loadJobs();
+            }}
           />
         ) : (
           <div className="flex min-h-64 items-center justify-center rounded-xl border border-zinc-200 bg-white text-sm text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900">
@@ -383,6 +424,7 @@ export function AccountingPage() {
     </div>
   );
 }
+
 function DeleteProjectDialog({
   job,
   onClose,
@@ -403,10 +445,6 @@ function DeleteProjectDialog({
 
   const verificationRequired = job.title || job.reference;
 
-  const handleFirstConfirm = () => {
-    setStep("verify");
-  };
-
   const handleDelete = async () => {
     if (verificationText !== verificationRequired) {
       alert(`Por favor, escreve: ${verificationRequired}`);
@@ -417,8 +455,8 @@ function DeleteProjectDialog({
     try {
       await jobsAPI.deleteJob(job.id);
       alert("Projeto eliminado com sucesso.");
-      onDeleted();
       onClose();
+      onDeleted();
     } catch (error) {
       console.error("Erro ao eliminar projeto:", error);
       alert("Erro ao eliminar projeto.");
@@ -475,7 +513,7 @@ function DeleteProjectDialog({
             Cancelar
           </button>
           <button
-            onClick={handleFirstConfirm}
+            onClick={() => setStep("verify")}
             className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
           >
             Sim, quero eliminar
@@ -513,12 +551,6 @@ function DeleteProjectDialog({
         autoFocus
         className="border-red-300"
       />
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">
-        Texto introduzido:{" "}
-        <span className="font-mono">
-          {verificationText || "(vazio)"}
-        </span>
-      </p>
       <div className="flex gap-2">
         <button
           onClick={() => {
@@ -549,15 +581,18 @@ function DeleteProjectDialog({
 function JobCostSheet({
   job,
   assigneeRows,
+  onJobDeleted,
 }: {
   job: any;
   assigneeRows: any[];
+  onJobDeleted: () => void;
 }) {
   const [parts, setParts] = useState<any[]>([]);
   const [hourLines, setHourLines] = useState<any[]>([]);
   const [extraCosts, setExtraCosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [addExtraOpen, setAddExtraOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const [savingRateId, setSavingRateId] = useState<
     string | null
   >(null);
@@ -568,10 +603,7 @@ function JobCostSheet({
       const [partsData, hourData, extraData] =
         await Promise.all([
           accountingAPI.getPartsForJob(job.id),
-          accountingAPI.getHourLinesForJob(
-            job.id,
-            assigneeRows,
-          ),
+          accountingAPI.getHourLinesForJob(job.id),
           accountingAPI.getExtraCosts(job.id),
         ]);
       setParts(partsData);
@@ -589,10 +621,7 @@ function JobCostSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job.id]);
 
-  const handleRateChange = async (
-    lineId: string,
-    value: string,
-  ) => {
+  const handleRateChange = (lineId: string, value: string) => {
     const rate = Number(value) || 0;
     setHourLines((current) =>
       current.map((l) =>
@@ -844,7 +873,10 @@ function JobCostSheet({
               <FileText className="mr-2 h-4 w-4" />
               Word
             </Button>
-            <Dialog>
+            <Dialog
+              open={deleteOpen}
+              onOpenChange={setDeleteOpen}
+            >
               <DialogTrigger asChild>
                 <Button
                   variant="outline"
@@ -862,12 +894,8 @@ function JobCostSheet({
                 </DialogHeader>
                 <DeleteProjectDialog
                   job={job}
-                  onClose={() => {
-                    /* fecha dialog */
-                  }}
-                  onDeleted={() => {
-                    /* recarrega lista */
-                  }}
+                  onClose={() => setDeleteOpen(false)}
+                  onDeleted={onJobDeleted}
                 />
               </DialogContent>
             </Dialog>
