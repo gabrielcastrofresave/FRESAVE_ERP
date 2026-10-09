@@ -27,7 +27,15 @@ import {
 
 type ViewMode = "dia" | "semana" | "mes";
 
-const DAY_NAMES = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+const DAY_NAMES = [
+  "Seg",
+  "Ter",
+  "Qua",
+  "Qui",
+  "Sex",
+  "Sáb",
+  "Dom",
+];
 
 // Data no formato YYYY-MM-DD, na hora local (toISOString devolvia o dia anterior em Lisboa)
 function toDateInput(date: Date) {
@@ -68,7 +76,10 @@ function periodoVisivel(view: ViewMode, cursor: Date) {
   }
   if (view === "semana") {
     const inicio = startOfWeekMonday(cursor);
-    return { from: toDateInput(inicio), to: toDateInput(addDays(inicio, 6)) };
+    return {
+      from: toDateInput(inicio),
+      to: toDateInput(addDays(inicio, 6)),
+    };
   }
   // Mês: a grelha tem 42 dias a começar na segunda da primeira semana
   const primeiro = startOfWeekMonday(
@@ -78,6 +89,32 @@ function periodoVisivel(view: ViewMode, cursor: Date) {
     from: toDateInput(primeiro),
     to: toDateInput(addDays(primeiro, 41)),
   };
+}
+
+function nomeDoRegisto(row: any) {
+  return (
+    row.users?.nome ||
+    row.wintouch_nome ||
+    row.wintouch_custo ||
+    "—"
+  );
+}
+
+function formatDataLonga(data?: string) {
+  if (!data) return "—";
+  return new Date(`${data}T00:00:00`).toLocaleDateString(
+    "pt-PT",
+    {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    },
+  );
+}
+
+function formatHoras(valor: any) {
+  return valor != null ? `${Number(valor).toFixed(2)} h` : "—";
 }
 
 export function ProductionCalendarPage() {
@@ -90,15 +127,22 @@ export function ProductionCalendarPage() {
   const [cursor, setCursor] = useState(new Date());
   const [selectedUserId, setSelectedUserId] = useState("todos");
   const [createOpen, setCreateOpen] = useState(false);
+  const [detalhe, setDetalhe] = useState<any | null>(null);
 
   const loadRows = async () => {
     setLoading(true);
     try {
       const { from, to } = periodoVisivel(view, cursor);
-      const rowsData = await productionTasksAPI.getAll(from, to);
+      const rowsData = await productionTasksAPI.getAll(
+        from,
+        to,
+      );
       setRows(rowsData);
     } catch (error) {
-      console.error("Erro ao carregar calendário de produção:", error);
+      console.error(
+        "Erro ao carregar calendário de produção:",
+        error,
+      );
     } finally {
       setLoading(false);
     }
@@ -107,7 +151,9 @@ export function ProductionCalendarPage() {
   const loadJobs = async () => {
     try {
       const jobsData = await jobsAPI.getAll();
-      setJobs(jobsData.filter((j: any) => j.status === "em_curso"));
+      setJobs(
+        jobsData.filter((j: any) => j.status === "em_curso"),
+      );
     } catch (error) {
       console.error("Erro ao carregar trabalhos:", error);
     }
@@ -125,7 +171,8 @@ export function ProductionCalendarPage() {
   const filteredRows = useMemo(() => {
     return rows.filter(
       (r: any) =>
-        selectedUserId === "todos" || r.user_id === selectedUserId,
+        selectedUserId === "todos" ||
+        r.user_id === selectedUserId,
     );
   }, [rows, selectedUserId]);
 
@@ -151,7 +198,8 @@ export function ProductionCalendarPage() {
   function shift(direction: number) {
     setCursor((current) => {
       if (view === "dia") return addDays(current, direction);
-      if (view === "semana") return addDays(current, direction * 7);
+      if (view === "semana")
+        return addDays(current, direction * 7);
       const d = new Date(current);
       d.setMonth(d.getMonth() + direction);
       return d;
@@ -159,7 +207,9 @@ export function ProductionCalendarPage() {
   }
 
   const weekStart = startOfWeekMonday(cursor);
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
+  const weekDays = Array.from({ length: 7 }, (_, i) =>
+    addDays(weekStart, i),
+  );
 
   const title =
     view === "dia"
@@ -176,13 +226,18 @@ export function ProductionCalendarPage() {
           });
 
   const dayRows = (day: Date) =>
-    filteredRows.filter((r: any) => isSameDay(new Date(r.data), day));
+    filteredRows.filter((r: any) =>
+      isSameDay(new Date(r.data), day),
+    );
 
   const handleDeleteTask = async (taskId: string) => {
     if (
-      confirm("Eliminar este registo (e todas as pessoas atribuídas a ele)?")
+      confirm(
+        "Eliminar este registo (e todas as pessoas atribuídas a ele)?",
+      )
     ) {
       await productionTasksAPI.deleteTask(taskId);
+      setDetalhe(null);
       await loadRows();
     }
   };
@@ -198,8 +253,8 @@ export function ProductionCalendarPage() {
             Calendário de Produção
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-            Atribui trabalhos obrigatórios à equipa. Cada pessoa regista as
-            suas próprias horas no dia atribuído.
+            Atribui trabalhos obrigatórios à equipa. Cada pessoa
+            regista as suas próprias horas no dia atribuído.
           </p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -213,8 +268,8 @@ export function ProductionCalendarPage() {
             <DialogHeader>
               <DialogTitle>Novo Registo</DialogTitle>
               <DialogDescription>
-                Atribui um trabalho a um ou mais utilizadores para um dia
-                específico.
+                Atribui um trabalho a um ou mais utilizadores
+                para um dia específico.
               </DialogDescription>
             </DialogHeader>
             <TaskForm
@@ -231,8 +286,8 @@ export function ProductionCalendarPage() {
         <div className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
           <Users className="h-4 w-4" />
           <span>
-            <strong>Vista de administração:</strong> atividade de toda a
-            equipa
+            <strong>Vista de administração:</strong> atividade
+            de toda a equipa
           </span>
         </div>
         <select
@@ -281,26 +336,28 @@ export function ProductionCalendarPage() {
             </h2>
           </div>
           <div className="flex rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
-            {(["dia", "semana", "mes"] as ViewMode[]).map((v) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                  view === v
-                    ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-50"
-                    : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-                }`}
-              >
-                {v === "mes" ? "Mês" : v}
-              </button>
-            ))}
+            {(["dia", "semana", "mes"] as ViewMode[]).map(
+              (v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  className={`rounded-md px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+                    view === v
+                      ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-50"
+                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                  }`}
+                >
+                  {v === "mes" ? "Mês" : v}
+                </button>
+              ),
+            )}
           </div>
         </div>
 
         {loading ? (
           <div className="flex min-h-[28rem] items-center justify-center text-sm text-zinc-400">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            A carregar registos…
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />A
+            carregar registos…
           </div>
         ) : view === "dia" ? (
           <div className="min-h-[20rem] space-y-2 p-4">
@@ -313,6 +370,7 @@ export function ProductionCalendarPage() {
                 <TaskPill
                   key={row.id}
                   row={row}
+                  onOpen={() => setDetalhe(row)}
                   onDelete={() => handleDeleteTask(row.task_id)}
                 />
               ))
@@ -356,7 +414,10 @@ export function ProductionCalendarPage() {
                       key={row.id}
                       compact
                       row={row}
-                      onDelete={() => handleDeleteTask(row.task_id)}
+                      onOpen={() => setDetalhe(row)}
+                      onDelete={() =>
+                        handleDeleteTask(row.task_id)
+                      }
                     />
                   ))}
                 </div>
@@ -364,19 +425,145 @@ export function ProductionCalendarPage() {
             </div>
           </div>
         ) : (
-          <MonthView cursor={cursor} rows={filteredRows} />
+          <MonthView
+            cursor={cursor}
+            rows={filteredRows}
+            onOpen={(row) => setDetalhe(row)}
+          />
         )}
       </section>
+
+      <Dialog
+        open={!!detalhe}
+        onOpenChange={(open) => !open && setDetalhe(null)}
+      >
+        <DialogContent className="sm:max-w-lg">
+          {detalhe && (
+            <>
+              <DialogHeader>
+                <DialogTitle>
+                  {detalhe.titulo || "(sem título)"}
+                </DialogTitle>
+                <DialogDescription>
+                  {detalhe.origem_wintouch
+                    ? "Horas importadas do Wintouch"
+                    : "Registo criado no calendário"}
+                </DialogDescription>
+              </DialogHeader>
+
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                <DetalheItem
+                  label="Utilizador"
+                  value={nomeDoRegisto(detalhe)}
+                />
+                <DetalheItem
+                  label="Data"
+                  value={formatDataLonga(detalhe.data)}
+                />
+                <DetalheItem
+                  label="Tipo"
+                  value={detalhe.tipo || "—"}
+                />
+                <DetalheItem
+                  label="Horário"
+                  value={
+                    detalhe.hora_inicio && detalhe.hora_fim
+                      ? `${detalhe.hora_inicio.slice(0, 5)}–${detalhe.hora_fim.slice(0, 5)}`
+                      : "Sem horário"
+                  }
+                />
+                <DetalheItem
+                  label="Almoço"
+                  value={
+                    detalhe.almoco_minutos != null
+                      ? `${detalhe.almoco_minutos} min`
+                      : "—"
+                  }
+                />
+                <DetalheItem
+                  label="Horas líquidas"
+                  value={formatHoras(detalhe.horas_liquidas)}
+                />
+                <DetalheItem
+                  label="Trabalho"
+                  value={detalhe.trabalho || "—"}
+                />
+                <DetalheItem
+                  label="Código do trabalho"
+                  value={detalhe.codigo_trabalho || "—"}
+                />{" "}
+                <DetalheItem
+                  label="Local"
+                  value={detalhe.local || "—"}
+                />
+                {detalhe.origem_wintouch && (
+                  <>
+                    <DetalheItem
+                      label="Código de custo"
+                      value={detalhe.wintouch_custo || "—"}
+                    />
+                    <DetalheItem
+                      label="Referência Wintouch"
+                      value={detalhe.origem_wintouch}
+                    />
+                  </>
+                )}
+              </dl>
+
+              <DialogFooter className="mt-4">
+                {!detalhe.origem_wintouch && (
+                  <Button
+                    variant="outline"
+                    className="text-red-600"
+                    onClick={() =>
+                      handleDeleteTask(detalhe.task_id)
+                    }
+                  >
+                    Apagar registo
+                  </Button>
+                )}
+                <Button
+                  variant="outline"
+                  onClick={() => setDetalhe(null)}
+                >
+                  Fechar
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function DetalheItem({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+        {label}
+      </dt>
+      <dd className="mt-0.5 break-words text-zinc-800 dark:text-zinc-100">
+        {value}
+      </dd>
     </div>
   );
 }
 
 function TaskPill({
   row,
+  onOpen,
   onDelete,
   compact = false,
 }: {
   row: any;
+  onOpen: () => void;
   onDelete: () => void;
   compact?: boolean;
 }) {
@@ -384,7 +571,8 @@ function TaskPill({
 
   return (
     <div
-      className={`group rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 text-left transition-shadow hover:shadow-sm dark:border-zinc-700 dark:bg-zinc-800 ${
+      onClick={onOpen}
+      className={`group cursor-pointer rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 text-left transition-shadow hover:shadow-sm dark:border-zinc-700 dark:bg-zinc-800 ${
         compact ? "p-2" : ""
       }`}
     >
@@ -394,7 +582,10 @@ function TaskPill({
         </p>
         {!importada && (
           <button
-            onClick={onDelete}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
             className="text-[10px] text-red-600 hover:underline dark:text-red-400"
           >
             apagar
@@ -402,31 +593,41 @@ function TaskPill({
         )}
       </div>
       <p className="mt-1 truncate text-[11px] font-medium text-zinc-700 dark:text-zinc-300">
-        {row.users?.nome || row.wintouch_nome || row.wintouch_custo}
+        {nomeDoRegisto(row)}
       </p>
       <div className="mt-2 flex items-center justify-between gap-2 text-[10px]">
         <span className="text-zinc-500 dark:text-zinc-400">
           {importada
-            ? row.horas_liquidas != null
-              ? `${Number(row.horas_liquidas).toFixed(2)} h`
-              : "Wintouch"
+            ? formatHoras(row.horas_liquidas)
             : row.hora_inicio && row.hora_fim
               ? `${row.hora_inicio.slice(0, 5)}–${row.hora_fim.slice(0, 5)}`
               : "Sem horário"}
         </span>
         {importada && (
-          <span className="text-[10px] text-zinc-400">Wintouch</span>
+          <span className="text-[10px] text-zinc-400">
+            Wintouch
+          </span>
         )}
       </div>
     </div>
   );
 }
 
-function MonthView({ cursor, rows }: { cursor: Date; rows: any[] }) {
+function MonthView({
+  cursor,
+  rows,
+  onOpen,
+}: {
+  cursor: Date;
+  rows: any[];
+  onOpen: (row: any) => void;
+}) {
   const first = startOfWeekMonday(
     new Date(cursor.getFullYear(), cursor.getMonth(), 1),
   );
-  const days = Array.from({ length: 42 }, (_, i) => addDays(first, i));
+  const days = Array.from({ length: 42 }, (_, i) =>
+    addDays(first, i),
+  );
 
   return (
     <div className="overflow-x-auto">
@@ -446,7 +647,8 @@ function MonthView({ cursor, rows }: { cursor: Date; rows: any[] }) {
             const dRows = rows.filter((r: any) =>
               isSameDay(new Date(r.data), day),
             );
-            const currentMonth = day.getMonth() === cursor.getMonth();
+            const currentMonth =
+              day.getMonth() === cursor.getMonth();
             return (
               <div
                 key={day.toISOString()}
@@ -469,12 +671,13 @@ function MonthView({ cursor, rows }: { cursor: Date; rows: any[] }) {
                 </div>
                 <div className="space-y-1">
                   {dRows.slice(0, 3).map((row: any) => (
-                    <div
+                    <button
                       key={row.id}
-                      className="block w-full truncate rounded bg-zinc-100 px-1.5 py-1 text-left text-[10px] font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+                      onClick={() => onOpen(row)}
+                      className="block w-full truncate rounded bg-zinc-100 px-1.5 py-1 text-left text-[10px] font-medium text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
                     >
-                      {row.users?.nome || row.wintouch_nome || row.wintouch_custo} · {row.titulo}
-                    </div>
+                      {nomeDoRegisto(row)} · {row.titulo}
+                    </button>
                   ))}
                   {dRows.length > 3 && (
                     <p className="px-1 text-[10px] text-zinc-400">
@@ -536,7 +739,11 @@ function TaskForm({
     <form className="mt-3 grid gap-4" onSubmit={submit}>
       <div className="space-y-2">
         <Label>Projeto (Trabalho) *</Label>
-        <JobPicker jobs={jobs} value={jobId} onChange={setJobId} />
+        <JobPicker
+          jobs={jobs}
+          value={jobId}
+          onChange={setJobId}
+        />
       </div>
 
       <div className="space-y-2">
@@ -562,7 +769,11 @@ function TaskForm({
       </div>
 
       <DialogFooter className="mt-2">
-        <Button type="button" variant="outline" onClick={onClose}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onClose}
+        >
           Cancelar
         </Button>
         <Button
@@ -570,7 +781,9 @@ function TaskForm({
           className="bg-red-600 hover:bg-red-700"
           disabled={loading}
         >
-          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {loading && (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          )}
           Criar Registo
         </Button>
       </DialogFooter>

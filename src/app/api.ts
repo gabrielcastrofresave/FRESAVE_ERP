@@ -1423,8 +1423,7 @@ export const productionTasksAPI = {
         users ( nome ),
         production_tasks!inner (
           tipo, job_id, titulo, cliente_obra, local, data, created_by, origem_wintouch,
-          jobs ( title )
-        )
+          jobs ( title, reference )        )
       `);
       if (from) q = q.gte("production_tasks.data", from);
       if (to) q = q.lte("production_tasks.data", to);
@@ -1464,6 +1463,8 @@ export const productionTasksAPI = {
         row.production_tasks?.titulo ||
         row.production_tasks?.jobs?.title ||
         "(sem título)",
+            trabalho: row.production_tasks?.jobs?.title || null,
+      codigo_trabalho: row.production_tasks?.jobs?.reference || null,
       cliente_obra: row.production_tasks?.cliente_obra,
       local: row.production_tasks?.local,
       data: row.production_tasks?.data,
