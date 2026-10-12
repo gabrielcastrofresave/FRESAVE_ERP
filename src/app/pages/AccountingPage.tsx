@@ -1,12 +1,15 @@
 // src/app/pages/AccountingPage.tsx
 
-import { useState, useEffect, useMemo } from "react";
-import { useApp } from "../AppContext";
 import {
-  jobsAPI,
-  productionTasksAPI,
-  accountingAPI,
-} from "../api";
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useDeferredValue,
+  memo,
+} from "react";
+import { useApp } from "../AppContext";
+import { jobsAPI, accountingAPI } from "../api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -39,6 +42,13 @@ type StatusFilter = "todos" | "em_curso" | "concluido";
 type SortOption =
   "recentes" | "antigos" | "titulo" | "referencia";
 
+// Criados uma única vez: localeCompare cria um Collator novo a cada chamada,
+// o que pesa muito ao ordenar milhares de projetos
+const collator = new Intl.Collator("pt");
+const collatorNumerico = new Intl.Collator("pt", {
+  numeric: true,
+});
+
 function formatEuro(value: number) {
   return `${value.toFixed(2)} €`;
 }
@@ -52,7 +62,7 @@ function formatDatePt(value: string | null | undefined) {
 function normalize(value: unknown) {
   return String(value ?? "")
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .trim();
 }
@@ -83,7 +93,7 @@ function downloadCsv(
     headers.map(escapeCell).join(";"),
     ...rows.map((row) => row.map(escapeCell).join(";")),
   ];
-  const csvContent = "\ufeff" + lines.join("\r\n");
+  const csvContent = "﻿" + lines.join("\r\n");
   const blob = new Blob([csvContent], {
     type: "text/csv;charset=utf-8;",
   });
@@ -104,48 +114,57 @@ export function AccountingPage() {
     currentUser?.role === "escritorio";
 
   const [jobs, setJobs] = useState<any[]>([]);
-  const [assigneeRows, setAssigneeRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedJobId, setSelectedJobId] =
     useState<string>("");
 
   // Filtros
   const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
   const [statusFilter, setStatusFilter] =
     useState<StatusFilter>("todos");
   const [sortBy, setSortBy] = useState<SortOption>("recentes");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const loadJobs = async () => {
-    setLoading(true);
-    try {
-      const [jobsData, rowsData] = await Promise.all([
-        jobsAPI.getAll(),
-        productionTasksAPI.getAll(),
-      ]);
-      setJobs(jobsData);
-      setAssigneeRows(rowsData);
-      setSelectedJobId((current) =>
-        current && jobsData.some((j: any) => j.id === current)
-          ? current
-          : "",
-      );
-    } catch (error) {
-      console.error("Erro ao carregar projetos:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Só a lista de projetos é pedida à entrada (os custos de cada projeto
+  // são pedidos quando o projeto é selecionado)
   useEffect(() => {
-    if (hasAccess) loadJobs();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!hasAccess) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const jobsData = await jobsAPI.getAll();
+        if (!cancelled) setJobs(jobsData);
+      } catch (error) {
+        console.error("Erro ao carregar projetos:", error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [hasAccess]);
 
   // Volta ao início da lista sempre que um filtro muda
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
-  }, [search, statusFilter, sortBy]);
+  }, [deferredSearch, statusFilter, sortBy]);
+
+  // Prepara cada projeto uma única vez (data e textos normalizados),
+  // para a pesquisa e a ordenação não repetirem este trabalho a cada tecla
+  const indexedJobs = useMemo(
+    () =>
+      jobs.map((job, index) => ({
+        job,
+        index,
+        ts: jobDate(job),
+        titulo: normalize(job.title),
+        ref: normalize(job.reference),
+      })),
+    [jobs],
+  );
 
   const statusCounts = useMemo(() => {
     const concluido = jobs.filter(
@@ -158,12 +177,36 @@ export function AccountingPage() {
     };
   }, [jobs]);
 
-  const filteredJobs = useMemo(() => {
-    const term = normalize(search);
+  // A ordenação só é refeita quando muda a lista ou o critério,
+  // não quando se escreve na pesquisa
+  const sortedJobs = useMemo(() => {
+    const list = [...indexedJobs];
+    list.sort((a, b) => {
+      switch (sortBy) {
+        case "titulo":
+          return collator.compare(
+            String(a.job.title ?? ""),
+            String(b.job.title ?? ""),
+          );
+        case "referencia":
+          return collatorNumerico.compare(
+            String(a.job.reference ?? ""),
+            String(b.job.reference ?? ""),
+          );
+        case "antigos":
+          return a.ts - b.ts || b.index - a.index;
+        case "recentes":
+        default:
+          return b.ts - a.ts || a.index - b.index;
+      }
+    });
+    return list;
+  }, [indexedJobs, sortBy]);
 
-    const result = jobs
-      .map((job, index) => ({ job, index }))
-      .filter(({ job }) => {
+  const filteredJobs = useMemo(() => {
+    const term = normalize(deferredSearch);
+    return sortedJobs
+      .filter(({ job, titulo, ref }) => {
         if (
           statusFilter === "concluido" &&
           job.status !== "concluido"
@@ -175,39 +218,10 @@ export function AccountingPage() {
         )
           return false;
         if (!term) return true;
-        return (
-          normalize(job.title).includes(term) ||
-          normalize(job.reference).includes(term)
-        );
-      });
-
-    result.sort((a, b) => {
-      switch (sortBy) {
-        case "titulo":
-          return String(a.job.title ?? "").localeCompare(
-            String(b.job.title ?? ""),
-            "pt",
-          );
-        case "referencia":
-          return String(a.job.reference ?? "").localeCompare(
-            String(b.job.reference ?? ""),
-            "pt",
-            { numeric: true },
-          );
-        case "antigos":
-          return (
-            jobDate(a.job) - jobDate(b.job) || b.index - a.index
-          );
-        case "recentes":
-        default:
-          return (
-            jobDate(b.job) - jobDate(a.job) || a.index - b.index
-          );
-      }
-    });
-
-    return result.map((r) => r.job);
-  }, [jobs, search, statusFilter, sortBy]);
+        return titulo.includes(term) || ref.includes(term);
+      })
+      .map((r) => r.job);
+  }, [sortedJobs, deferredSearch, statusFilter]);
 
   const visibleJobs = filteredJobs.slice(0, visibleCount);
   const hasActiveFilters =
@@ -218,9 +232,17 @@ export function AccountingPage() {
     setStatusFilter("todos");
   };
 
-  const selectedJob = jobs.find(
-    (j: any) => j.id === selectedJobId,
+  const selectedJob = useMemo(
+    () => jobs.find((j: any) => j.id === selectedJobId),
+    [jobs, selectedJobId],
   );
+
+  // Depois de eliminar, tira o projeto da lista local em vez de
+  // voltar a pedir todos os projetos à base de dados
+  const handleJobDeleted = useCallback((jobId: string) => {
+    setSelectedJobId("");
+    setJobs((current) => current.filter((j) => j.id !== jobId));
+  }, []);
 
   if (!hasAccess) {
     return (
@@ -337,13 +359,15 @@ export function AccountingPage() {
               <p className="text-sm text-zinc-500">
                 Nenhum projeto corresponde aos filtros.
               </p>
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="mt-2 text-xs font-medium text-red-600 hover:underline"
-              >
-                Limpar filtros
-              </button>
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="mt-2 text-xs font-medium text-red-600 hover:underline"
+                >
+                  Limpar filtros
+                </button>
+              )}
             </div>
           ) : (
             <div className="min-h-0 flex-1 divide-y divide-zinc-100 overflow-y-auto dark:divide-zinc-800 max-lg:max-h-[28rem]">
@@ -409,11 +433,9 @@ export function AccountingPage() {
           <JobCostSheet
             key={selectedJob.id}
             job={selectedJob}
-            assigneeRows={assigneeRows}
-            onJobDeleted={() => {
-              setSelectedJobId("");
-              loadJobs();
-            }}
+            onJobDeleted={() =>
+              handleJobDeleted(selectedJob.id)
+            }
           />
         ) : (
           <div className="flex min-h-64 items-center justify-center rounded-xl border border-zinc-200 bg-white text-sm text-zinc-400 dark:border-zinc-800 dark:bg-zinc-900">
@@ -578,13 +600,63 @@ function DeleteProjectDialog({
   );
 }
 
+// Linha da tabela de horas. Está em memo para que, ao escrever o preço/hora
+// de uma linha, só essa linha seja desenhada de novo.
+const HourRow = memo(function HourRow({
+  line,
+  saving,
+  onRateChange,
+  onRateBlur,
+}: {
+  line: any;
+  saving: boolean;
+  onRateChange: (lineId: string, value: string) => void;
+  onRateBlur: (lineId: string, rate: number) => void;
+}) {
+  return (
+    <tr>
+      <td className="px-5 py-2 text-sm text-zinc-800 dark:text-zinc-100">
+        {line.user_nome}
+      </td>
+      <td className="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
+        {formatDatePt(line.data)}
+      </td>
+      <td className="px-4 py-2 text-right text-sm text-zinc-600 dark:text-zinc-300">
+        {line.hours.toFixed(2)}h
+      </td>
+      <td className="px-4 py-2 text-right">
+        <div className="flex items-center justify-end gap-1">
+          <Input
+            type="number"
+            min="0"
+            step="0.01"
+            defaultValue={line.rate || ""}
+            onChange={(e) =>
+              onRateChange(line.id, e.target.value)
+            }
+            onBlur={(e) =>
+              onRateBlur(line.id, Number(e.target.value) || 0)
+            }
+            className="h-8 w-24 text-right"
+            placeholder="0.00"
+          />
+          {saving && (
+            <Loader2 className="h-3 w-3 animate-spin text-zinc-400" />
+          )}
+        </div>
+      </td>
+      <td className="px-5 py-2 text-right text-sm font-medium text-zinc-900 dark:text-zinc-50">
+        {formatEuro(line.subtotal)}
+      </td>
+    </tr>
+  );
+});
+
 function JobCostSheet({
   job,
-  assigneeRows,
   onJobDeleted,
 }: {
   job: any;
-  assigneeRows: any[];
   onJobDeleted: () => void;
 }) {
   const [parts, setParts] = useState<any[]>([]);
@@ -597,73 +669,90 @@ function JobCostSheet({
     string | null
   >(null);
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [partsData, hourData, extraData] =
-        await Promise.all([
-          accountingAPI.getPartsForJob(job.id),
-          accountingAPI.getHourLinesForJob(job.id),
-          accountingAPI.getExtraCosts(job.id),
-        ]);
-      setParts(partsData);
-      setHourLines(hourData);
-      setExtraCosts(extraData);
-    } catch (error) {
-      console.error("Erro ao carregar custos:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Carga inicial: peças, horas e outros custos em paralelo
   useEffect(() => {
-    loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const [partsData, hourData, extraData] =
+          await Promise.all([
+            accountingAPI.getPartsForJob(job.id),
+            accountingAPI.getHourLinesForJob(job.id),
+            accountingAPI.getExtraCosts(job.id),
+          ]);
+        if (cancelled) return;
+        setParts(partsData);
+        setHourLines(hourData);
+        setExtraCosts(extraData);
+      } catch (error) {
+        console.error("Erro ao carregar custos:", error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [job.id]);
 
-  const handleRateChange = (lineId: string, value: string) => {
-    const rate = Number(value) || 0;
-    setHourLines((current) =>
-      current.map((l) =>
-        l.id === lineId
-          ? { ...l, rate, subtotal: l.hours * rate }
-          : l,
-      ),
-    );
-  };
-
-  const handleRateBlur = async (
-    lineId: string,
-    rate: number,
-  ) => {
-    setSavingRateId(lineId);
+  // Adicionar ou eliminar um custo só mexe nos outros custos,
+  // por isso só estes são pedidos de novo
+  const loadExtras = useCallback(async () => {
     try {
-      await accountingAPI.saveHourRate(lineId, rate);
+      setExtraCosts(await accountingAPI.getExtraCosts(job.id));
     } catch (error) {
-      console.error("Erro ao guardar preço/hora:", error);
-    } finally {
-      setSavingRateId(null);
+      console.error("Erro ao carregar outros custos:", error);
     }
-  };
+  }, [job.id]);
+
+  const handleRateChange = useCallback(
+    (lineId: string, value: string) => {
+      const rate = Number(value) || 0;
+      setHourLines((current) =>
+        current.map((l) =>
+          l.id === lineId
+            ? { ...l, rate, subtotal: l.hours * rate }
+            : l,
+        ),
+      );
+    },
+    [],
+  );
+
+  const handleRateBlur = useCallback(
+    async (lineId: string, rate: number) => {
+      setSavingRateId(lineId);
+      try {
+        await accountingAPI.saveHourRate(lineId, rate);
+      } catch (error) {
+        console.error("Erro ao guardar preço/hora:", error);
+      } finally {
+        setSavingRateId(null);
+      }
+    },
+    [],
+  );
 
   const handleDeleteExtra = async (id: string) => {
     if (confirm("Eliminar este custo?")) {
       await accountingAPI.deleteExtraCost(id);
-      await loadData();
+      await loadExtras();
     }
   };
 
-  const totalParts = parts.reduce(
-    (sum, p) => sum + p.subtotal,
-    0,
+  const totalParts = useMemo(
+    () => parts.reduce((sum, p) => sum + p.subtotal, 0),
+    [parts],
   );
-  const totalHours = hourLines.reduce(
-    (sum, l) => sum + l.subtotal,
-    0,
+  const totalHours = useMemo(
+    () => hourLines.reduce((sum, l) => sum + l.subtotal, 0),
+    [hourLines],
   );
-  const totalExtras = extraCosts.reduce(
-    (sum, e) => sum + Number(e.valor),
-    0,
+  const totalExtras = useMemo(
+    () =>
+      extraCosts.reduce((sum, e) => sum + Number(e.valor), 0),
+    [extraCosts],
   );
   const grandTotal = totalParts + totalHours + totalExtras;
 
@@ -821,7 +910,7 @@ function JobCostSheet({
       </body>
       </html>
     `;
-    const blob = new Blob(["\ufeff", html], {
+    const blob = new Blob(["﻿", html], {
       type: "application/msword",
     });
     const url = URL.createObjectURL(blob);
@@ -998,44 +1087,13 @@ function JobCostSheet({
             </thead>
             <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {hourLines.map((l) => (
-                <tr key={l.id}>
-                  <td className="px-5 py-2 text-sm text-zinc-800 dark:text-zinc-100">
-                    {l.user_nome}
-                  </td>
-                  <td className="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
-                    {formatDatePt(l.data)}
-                  </td>
-                  <td className="px-4 py-2 text-right text-sm text-zinc-600 dark:text-zinc-300">
-                    {l.hours.toFixed(2)}h
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        defaultValue={l.rate || ""}
-                        onChange={(e) =>
-                          handleRateChange(l.id, e.target.value)
-                        }
-                        onBlur={(e) =>
-                          handleRateBlur(
-                            l.id,
-                            Number(e.target.value) || 0,
-                          )
-                        }
-                        className="h-8 w-24 text-right"
-                        placeholder="0.00"
-                      />
-                      {savingRateId === l.id && (
-                        <Loader2 className="h-3 w-3 animate-spin text-zinc-400" />
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-5 py-2 text-right text-sm font-medium text-zinc-900 dark:text-zinc-50">
-                    {formatEuro(l.subtotal)}
-                  </td>
-                </tr>
+                <HourRow
+                  key={l.id}
+                  line={l}
+                  saving={savingRateId === l.id}
+                  onRateChange={handleRateChange}
+                  onRateBlur={handleRateBlur}
+                />
               ))}
             </tbody>
           </table>
@@ -1075,7 +1133,7 @@ function JobCostSheet({
                 <ExtraCostForm
                   jobId={job.id}
                   onClose={() => setAddExtraOpen(false)}
-                  onSaved={loadData}
+                  onSaved={loadExtras}
                 />
               </DialogContent>
             </Dialog>

@@ -1,6 +1,12 @@
 // src/app/pages/ProductionCalendarPage.tsx
 
-import { useState, useEffect, useMemo } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import { useApp } from "../AppContext";
 import { productionTasksAPI, jobsAPI } from "../api";
 import { Button } from "../components/ui/button";
@@ -91,6 +97,11 @@ function periodoVisivel(view: ViewMode, cursor: Date) {
   };
 }
 
+// Chave do dia de um registo ("YYYY-MM-DD"), mesmo que a coluna venha com hora
+function chaveDia(row: any) {
+  return String(row.data).slice(0, 10);
+}
+
 function nomeDoRegisto(row: any) {
   return (
     row.users?.nome ||
@@ -102,15 +113,14 @@ function nomeDoRegisto(row: any) {
 
 function formatDataLonga(data?: string) {
   if (!data) return "—";
-  return new Date(`${data}T00:00:00`).toLocaleDateString(
-    "pt-PT",
-    {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    },
-  );
+  return new Date(
+    `${String(data).slice(0, 10)}T00:00:00`,
+  ).toLocaleDateString("pt-PT", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 function formatHoras(valor: any) {
@@ -129,59 +139,76 @@ export function ProductionCalendarPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [detalhe, setDetalhe] = useState<any | null>(null);
 
-  const loadRows = async () => {
+  const isAdmin =
+    currentUser?.role === "administrador" ||
+    currentUser?.role === "escritorio";
+
+  const pedidoAtual = useRef(0);
+
+  // Só carrega se tiver acesso, e ignora respostas antigas
+  const loadRows = useCallback(async () => {
+    if (!isAdmin) return;
+    const id = ++pedidoAtual.current;
     setLoading(true);
     try {
       const { from, to } = periodoVisivel(view, cursor);
-      const rowsData = await productionTasksAPI.getAll(
-        from,
-        to,
-      );
-      setRows(rowsData);
+      const data = await productionTasksAPI.getAll(from, to);
+      if (id === pedidoAtual.current) setRows(data);
     } catch (error) {
       console.error(
         "Erro ao carregar calendário de produção:",
         error,
       );
     } finally {
-      setLoading(false);
+      if (id === pedidoAtual.current) setLoading(false);
     }
-  };
+  }, [view, cursor, isAdmin]);
 
-  const loadJobs = async () => {
-    try {
-      const jobsData = await jobsAPI.getAll();
-      setJobs(
-        jobsData.filter((j: any) => j.status === "em_curso"),
-      );
-    } catch (error) {
-      console.error("Erro ao carregar trabalhos:", error);
-    }
-  };
-
-  // Recarrega sempre que muda a vista ou o período
   useEffect(() => {
     loadRows();
-  }, [view, cursor]);
+  }, [loadRows]);
 
+  // Trabalhos: só quando o diálogo de criação abre pela primeira vez
   useEffect(() => {
-    loadJobs();
-  }, []);
+    if (!isAdmin || !createOpen || jobs.length > 0) return;
+    jobsAPI
+      .getAll()
+      .then((data: any[]) =>
+        setJobs(data.filter((j: any) => j.status === "em_curso")),
+      )
+      .catch((error: unknown) =>
+        console.error("Erro ao carregar trabalhos:", error),
+      );
+  }, [isAdmin, createOpen, jobs.length]);
 
-  const filteredRows = useMemo(() => {
-    return rows.filter(
-      (r: any) =>
-        selectedUserId === "todos" ||
-        r.user_id === selectedUserId,
-    );
-  }, [rows, selectedUserId]);
+  const filteredRows = useMemo(
+    () =>
+      rows.filter(
+        (r: any) =>
+          selectedUserId === "todos" ||
+          r.user_id === selectedUserId,
+      ),
+    [rows, selectedUserId],
+  );
+
+  // Agrupa por dia uma única vez
+  const rowsPorDia = useMemo(() => {
+    const mapa = new Map<string, any[]>();
+    for (const r of filteredRows) {
+      const chave = chaveDia(r);
+      const lista = mapa.get(chave);
+      if (lista) lista.push(r);
+      else mapa.set(chave, [r]);
+    }
+    return mapa;
+  }, [filteredRows]);
+
+  const dayRows = (day: Date) =>
+    rowsPorDia.get(toDateInput(day)) ?? [];
 
   // Os hooks ficam todos acima deste ponto. O controlo de acesso só é feito
   // depois, para o número de hooks ser sempre o mesmo entre renderizações.
-  if (
-    currentUser?.role !== "administrador" &&
-    currentUser?.role !== "escritorio"
-  ) {
+  if (!isAdmin) {
     return (
       <div className="mx-auto flex max-w-md flex-col items-center gap-3 py-24 text-center">
         <ShieldAlert className="h-10 w-10 text-zinc-300" />
@@ -224,11 +251,6 @@ export function ProductionCalendarPage() {
             month: "long",
             year: "numeric",
           });
-
-  const dayRows = (day: Date) =>
-    filteredRows.filter((r: any) =>
-      isSameDay(new Date(r.data), day),
-    );
 
   const handleDeleteTask = async (taskId: string) => {
     if (
@@ -427,7 +449,7 @@ export function ProductionCalendarPage() {
         ) : (
           <MonthView
             cursor={cursor}
-            rows={filteredRows}
+            rowsPorDia={rowsPorDia}
             onOpen={(row) => setDetalhe(row)}
           />
         )}
@@ -491,7 +513,7 @@ export function ProductionCalendarPage() {
                 <DetalheItem
                   label="Código do trabalho"
                   value={detalhe.codigo_trabalho || "—"}
-                />{" "}
+                />
                 <DetalheItem
                   label="Local"
                   value={detalhe.local || "—"}
@@ -615,11 +637,11 @@ function TaskPill({
 
 function MonthView({
   cursor,
-  rows,
+  rowsPorDia,
   onOpen,
 }: {
   cursor: Date;
-  rows: any[];
+  rowsPorDia: Map<string, any[]>;
   onOpen: (row: any) => void;
 }) {
   const first = startOfWeekMonday(
@@ -644,9 +666,7 @@ function MonthView({
         </div>
         <div className="grid grid-cols-7 divide-x divide-y divide-zinc-100 dark:divide-zinc-800">
           {days.map((day) => {
-            const dRows = rows.filter((r: any) =>
-              isSameDay(new Date(r.data), day),
-            );
+            const dRows = rowsPorDia.get(toDateInput(day)) ?? [];
             const currentMonth =
               day.getMonth() === cursor.getMonth();
             return (

@@ -1,6 +1,12 @@
 // src/app/pages/MyActivityPage.tsx
 
-import { useState, useEffect } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import { useApp } from "../AppContext";
 import { productionTasksAPI, jobsAPI } from "../api";
 import { Button } from "../components/ui/button";
@@ -49,8 +55,12 @@ const ALMOCO_OPCOES = [
   { value: "90", label: "1 hora e meia" },
 ];
 
+// Data no formato YYYY-MM-DD, na hora local (toISOString devolvia o dia anterior em Lisboa)
 function toDateInput(date: Date) {
-  return date.toISOString().split("T")[0];
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 function isSameDay(a: Date, b: Date) {
   return (
@@ -71,6 +81,45 @@ function addDays(date: Date, n: number) {
   const d = new Date(date);
   d.setDate(d.getDate() + n);
   return d;
+}
+
+// Intervalo de datas que a vista atual mostra (só este período é pedido à base de dados)
+function periodoVisivel(view: ViewMode, cursor: Date) {
+  if (view === "dia") {
+    const s = toDateInput(cursor);
+    return { from: s, to: s };
+  }
+  if (view === "semana") {
+    const inicio = startOfWeekMonday(cursor);
+    return {
+      from: toDateInput(inicio),
+      to: toDateInput(addDays(inicio, 6)),
+    };
+  }
+  // Mês: a grelha tem 42 dias a começar na segunda da primeira semana
+  const primeiro = startOfWeekMonday(
+    new Date(cursor.getFullYear(), cursor.getMonth(), 1),
+  );
+  return {
+    from: toDateInput(primeiro),
+    to: toDateInput(addDays(primeiro, 41)),
+  };
+}
+
+// Chave do dia de um registo ("YYYY-MM-DD"), mesmo que a coluna venha com hora
+function chaveDia(row: any) {
+  return String(row.data).slice(0, 10);
+}
+
+function formatDataLonga(data?: string) {
+  if (!data) return "";
+  return new Date(
+    `${String(data).slice(0, 10)}T00:00:00`,
+  ).toLocaleDateString("pt-PT", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  });
 }
 
 // ---------- Cálculo de horas ----------
@@ -127,21 +176,10 @@ function formatHours(mins: number) {
   })} h`;
 }
 
-function totalMinutes(list: any[]) {
-  return list.reduce(
-    (acc, r) =>
-      acc +
-      (netMinutes(
-        r.hora_inicio,
-        r.hora_fim,
-        r.almoco_minutos,
-      ) ?? 0),
-    0,
-  );
-}
-
 export function MyActivityPage() {
   const { currentUser } = useApp();
+  const userId = currentUser?.id;
+
   const [rows, setRows] = useState<any[]>([]);
   const [jobs, setJobs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,32 +190,67 @@ export function MyActivityPage() {
     null,
   );
 
-  const loadData = async () => {
+  const pedidoAtual = useRef(0);
+  const jobsPedidos = useRef(false);
+
+  // Só pede o período visível e ignora respostas antigas
+  const loadRows = useCallback(async () => {
+    if (!userId) return;
+    const id = ++pedidoAtual.current;
     setLoading(true);
     try {
-      const [allRows, allJobs] = await Promise.all([
-        productionTasksAPI.getAll(),
-        jobsAPI.getAll(),
-      ]);
-      setRows(
-        allRows.filter(
-          (r: any) => r.user_id === currentUser?.id,
-        ),
-      );
-      setJobs(
-        allJobs.filter((j: any) => j.status === "em_curso"),
-      );
+      const { from, to } = periodoVisivel(view, cursor);
+      const data = await productionTasksAPI.getAll(from, to);
+      if (id === pedidoAtual.current) {
+        setRows(data.filter((r: any) => r.user_id === userId));
+      }
     } catch (error) {
       console.error("Erro ao carregar atividade:", error);
     } finally {
-      setLoading(false);
+      if (id === pedidoAtual.current) setLoading(false);
     }
-  };
+  }, [userId, view, cursor]);
 
   useEffect(() => {
-    if (currentUser?.id) loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser?.id]);
+    loadRows();
+  }, [loadRows]);
+
+  // Trabalhos: só quando um diálogo (criar/editar) abre pela primeira vez
+  useEffect(() => {
+    if (!(createOpen || editingRow) || jobsPedidos.current) return;
+    jobsPedidos.current = true;
+    jobsAPI
+      .getAll()
+      .then((data: any[]) =>
+        setJobs(data.filter((j: any) => j.status === "em_curso")),
+      )
+      .catch((error: unknown) => {
+        jobsPedidos.current = false;
+        console.error("Erro ao carregar trabalhos:", error);
+      });
+  }, [createOpen, editingRow]);
+
+  // Agrupa por dia e calcula os totais uma única vez
+  const { rowsPorDia, totaisPorDia } = useMemo(() => {
+    const porDia = new Map<string, any[]>();
+    const totais = new Map<string, number>();
+    for (const r of rows) {
+      const chave = chaveDia(r);
+      const lista = porDia.get(chave);
+      if (lista) lista.push(r);
+      else porDia.set(chave, [r]);
+      const liquidos =
+        netMinutes(r.hora_inicio, r.hora_fim, r.almoco_minutos) ??
+        0;
+      totais.set(chave, (totais.get(chave) ?? 0) + liquidos);
+    }
+    return { rowsPorDia: porDia, totaisPorDia: totais };
+  }, [rows]);
+
+  const dayRows = (day: Date) =>
+    rowsPorDia.get(toDateInput(day)) ?? [];
+  const dayTotal = (day: Date) =>
+    totaisPorDia.get(toDateInput(day)) ?? 0;
 
   function shift(direction: number) {
     setCursor((current) => {
@@ -208,9 +281,6 @@ export function MyActivityPage() {
             month: "long",
             year: "numeric",
           });
-
-  const dayRows = (day: Date) =>
-    rows.filter((r: any) => isSameDay(new Date(r.data), day));
 
   return (
     <div className="mx-auto max-w-7xl space-y-7">
@@ -245,7 +315,7 @@ export function MyActivityPage() {
               jobs={jobs}
               currentUser={currentUser}
               onClose={() => setCreateOpen(false)}
-              onSaved={loadData}
+              onSaved={loadRows}
             />
           </DialogContent>
         </Dialog>
@@ -326,7 +396,7 @@ export function MyActivityPage() {
                     Total do dia
                   </span>
                   <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
-                    {formatHours(totalMinutes(dayRows(cursor)))}
+                    {formatHours(dayTotal(cursor))}
                   </span>
                 </div>
               </>
@@ -378,7 +448,7 @@ export function MyActivityPage() {
               {/* Rodapé: total de horas líquidas trabalhadas por dia */}
               <div className="col-span-7 grid grid-cols-7 divide-x divide-zinc-100 border-t border-zinc-200 bg-zinc-50 dark:divide-zinc-800 dark:border-zinc-700 dark:bg-zinc-800/50">
                 {weekDays.map((day) => {
-                  const total = totalMinutes(dayRows(day));
+                  const total = dayTotal(day);
                   return (
                     <div
                       key={`total-${day.toISOString()}`}
@@ -399,7 +469,8 @@ export function MyActivityPage() {
         ) : (
           <MonthView
             cursor={cursor}
-            rows={rows}
+            rowsPorDia={rowsPorDia}
+            totaisPorDia={totaisPorDia}
             onSelect={setEditingRow}
           />
         )}
@@ -414,15 +485,7 @@ export function MyActivityPage() {
           <DialogHeader>
             <DialogTitle>Editar Registo</DialogTitle>
             <DialogDescription>
-              {editingRow &&
-                new Date(editingRow.data).toLocaleDateString(
-                  "pt-PT",
-                  {
-                    weekday: "long",
-                    day: "numeric",
-                    month: "long",
-                  },
-                )}
+              {editingRow && formatDataLonga(editingRow.data)}
             </DialogDescription>
           </DialogHeader>
           {editingRow && (
@@ -432,7 +495,7 @@ export function MyActivityPage() {
               jobs={jobs}
               currentUser={currentUser}
               onClose={() => setEditingRow(null)}
-              onSaved={loadData}
+              onSaved={loadRows}
             />
           )}
         </DialogContent>
@@ -483,11 +546,13 @@ function TaskPill({
 
 function MonthView({
   cursor,
-  rows,
+  rowsPorDia,
+  totaisPorDia,
   onSelect,
 }: {
   cursor: Date;
-  rows: any[];
+  rowsPorDia: Map<string, any[]>;
+  totaisPorDia: Map<string, number>;
   onSelect: (row: any) => void;
 }) {
   const first = startOfWeekMonday(
@@ -512,12 +577,11 @@ function MonthView({
         </div>
         <div className="grid grid-cols-7 divide-x divide-y divide-zinc-100 dark:divide-zinc-800">
           {days.map((day) => {
-            const dRows = rows.filter((r: any) =>
-              isSameDay(new Date(r.data), day),
-            );
+            const chave = toDateInput(day);
+            const dRows = rowsPorDia.get(chave) ?? [];
+            const total = totaisPorDia.get(chave) ?? 0;
             const currentMonth =
               day.getMonth() === cursor.getMonth();
-            const total = totalMinutes(dRows);
             return (
               <div
                 key={day.toISOString()}
