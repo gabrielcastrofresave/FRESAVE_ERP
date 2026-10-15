@@ -174,7 +174,9 @@ export function ProductionCalendarPage() {
     jobsAPI
       .getAll()
       .then((data: any[]) =>
-        setJobs(data.filter((j: any) => j.status === "em_curso")),
+        setJobs(
+          data.filter((j: any) => j.status === "em_curso"),
+        ),
       )
       .catch((error: unknown) =>
         console.error("Erro ao carregar trabalhos:", error),
@@ -252,15 +254,21 @@ export function ProductionCalendarPage() {
             year: "numeric",
           });
 
-  const handleDeleteTask = async (taskId: string) => {
-    if (
-      confirm(
-        "Eliminar este registo (e todas as pessoas atribuídas a ele)?",
-      )
-    ) {
-      await productionTasksAPI.deleteTask(taskId);
+  // Elimina (soft delete) a atribuição desta linha. Nas horas do Wintouch,
+  // o programa de sincronização pergunta depois na consola se apaga também lá.
+  const handleDeleteTask = async (row: any) => {
+    const msg = row.origem_wintouch
+      ? "Eliminar esta hora importada do Wintouch?\n\nO programa de sincronização vai perguntar na consola se a apaga também no Wintouch."
+      : "Eliminar este registo?";
+    if (!confirm(msg)) return;
+    try {
+      await productionTasksAPI.deleteAssignee(row.id);
       setDetalhe(null);
       await loadRows();
+    } catch (error: any) {
+      alert(
+        `Não foi possível apagar: ${error?.message ?? error}`,
+      );
     }
   };
 
@@ -393,7 +401,7 @@ export function ProductionCalendarPage() {
                   key={row.id}
                   row={row}
                   onOpen={() => setDetalhe(row)}
-                  onDelete={() => handleDeleteTask(row.task_id)}
+                  onDelete={() => handleDeleteTask(row)}
                 />
               ))
             )}
@@ -437,9 +445,7 @@ export function ProductionCalendarPage() {
                       compact
                       row={row}
                       onOpen={() => setDetalhe(row)}
-                      onDelete={() =>
-                        handleDeleteTask(row.task_id)
-                      }
+                      onDelete={() => handleDeleteTask(row)}
                     />
                   ))}
                 </div>
@@ -533,17 +539,13 @@ export function ProductionCalendarPage() {
               </dl>
 
               <DialogFooter className="mt-4">
-                {!detalhe.origem_wintouch && (
-                  <Button
-                    variant="outline"
-                    className="text-red-600"
-                    onClick={() =>
-                      handleDeleteTask(detalhe.task_id)
-                    }
-                  >
-                    Apagar registo
-                  </Button>
-                )}
+                <Button
+                  variant="outline"
+                  className="text-red-600"
+                  onClick={() => handleDeleteTask(detalhe)}
+                >
+                  Apagar registo
+                </Button>
                 <Button
                   variant="outline"
                   onClick={() => setDetalhe(null)}
@@ -602,17 +604,15 @@ function TaskPill({
         <p className="min-w-0 truncate text-xs font-semibold text-zinc-900 dark:text-zinc-50">
           {row.titulo || "(sem título)"}
         </p>
-        {!importada && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="text-[10px] text-red-600 hover:underline dark:text-red-400"
-          >
-            apagar
-          </button>
-        )}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          className="text-[10px] text-red-600 hover:underline dark:text-red-400"
+        >
+          apagar
+        </button>
       </div>
       <p className="mt-1 truncate text-[11px] font-medium text-zinc-700 dark:text-zinc-300">
         {nomeDoRegisto(row)}
@@ -666,7 +666,8 @@ function MonthView({
         </div>
         <div className="grid grid-cols-7 divide-x divide-y divide-zinc-100 dark:divide-zinc-800">
           {days.map((day) => {
-            const dRows = rowsPorDia.get(toDateInput(day)) ?? [];
+            const dRows =
+              rowsPorDia.get(toDateInput(day)) ?? [];
             const currentMonth =
               day.getMonth() === cursor.getMonth();
             return (
@@ -725,31 +726,68 @@ function TaskForm({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const { users } = useApp();
   const [loading, setLoading] = useState(false);
   const [jobId, setJobId] = useState("");
+  const [titulo, setTitulo] = useState("");
   const [data, setData] = useState(toDateInput(new Date()));
-  const [descricao, setDescricao] = useState("");
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
+  const [horaInicio, setHoraInicio] = useState("");
+  const [horaFim, setHoraFim] = useState("");
+  const [almoco, setAlmoco] = useState("");
+
+  function toggleUser(id: string) {
+    setAssigneeIds((cur) =>
+      cur.includes(id)
+        ? cur.filter((x) => x !== id)
+        : [...cur, id],
+    );
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!jobId) {
-      alert("Seleciona o projeto (trabalho).");
+
+    const jobSel = jobs.find((j: any) => j.id === jobId);
+    const tituloFinal = titulo.trim() || jobSel?.title || "";
+
+    if (!tituloFinal) {
+      alert("Indica um título ou seleciona um trabalho.");
+      return;
+    }
+    if (assigneeIds.length === 0) {
+      alert("Seleciona pelo menos um utilizador.");
+      return;
+    }
+    if ((horaInicio && !horaFim) || (!horaInicio && horaFim)) {
+      alert(
+        "Preenche a hora de início e a de fim (ou nenhuma).",
+      );
+      return;
+    }
+    if (horaInicio && horaFim && horaFim <= horaInicio) {
+      alert("A hora de fim tem de ser depois da de início.");
       return;
     }
 
     setLoading(true);
     try {
       await productionTasksAPI.create({
-        jobId,
+        jobId: jobId || null,
+        titulo: tituloFinal,
         data,
-        descricao: descricao.trim() || null,
         createdBy: currentUser?.id,
+        assigneeIds,
+        horaInicio: horaInicio || undefined,
+        horaFim: horaFim || undefined,
+        almocoMinutos: almoco ? Number(almoco) : undefined,
       });
       await onSaved();
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao criar registo:", error);
-      alert("Erro ao criar registo.");
+      alert(
+        `Erro ao criar registo: ${error?.message ?? error}`,
+      );
     } finally {
       setLoading(false);
     }
@@ -758,11 +796,21 @@ function TaskForm({
   return (
     <form className="mt-3 grid gap-4" onSubmit={submit}>
       <div className="space-y-2">
-        <Label>Projeto (Trabalho) *</Label>
+        <Label>Projeto (Trabalho)</Label>
         <JobPicker
           jobs={jobs}
           value={jobId}
           onChange={setJobId}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="titulo">Título</Label>
+        <Input
+          id="titulo"
+          value={titulo}
+          onChange={(e) => setTitulo(e.target.value)}
+          placeholder="Se vazio, usa o nome do trabalho"
         />
       </div>
 
@@ -776,16 +824,57 @@ function TaskForm({
           required
         />
       </div>
+
       <div className="space-y-2">
-        <Label htmlFor="descricao">Descrição</Label>
-        <textarea
-          id="descricao"
-          value={descricao}
-          onChange={(e) => setDescricao(e.target.value)}
-          rows={4}
-          placeholder="Notas ou instruções para este dia..."
-          className="w-full resize-y rounded-md border border-zinc-200 bg-transparent px-3 py-2 text-sm placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-red-600/30 dark:border-zinc-700"
-        />
+        <Label>
+          Utilizadores * ({assigneeIds.length} selecionados)
+        </Label>
+        <div className="grid max-h-44 grid-cols-2 gap-1 overflow-y-auto rounded-md border border-zinc-200 p-2 dark:border-zinc-700 sm:grid-cols-3">
+          {users.map((u: any) => (
+            <label
+              key={u.id}
+              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            >
+              <input
+                type="checkbox"
+                checked={assigneeIds.includes(u.id)}
+                onChange={() => toggleUser(u.id)}
+              />
+              <span className="truncate">{u.nome}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3">
+        <div className="space-y-2">
+          <Label htmlFor="hi">Início</Label>
+          <Input
+            id="hi"
+            type="time"
+            value={horaInicio}
+            onChange={(e) => setHoraInicio(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="hf">Fim</Label>
+          <Input
+            id="hf"
+            type="time"
+            value={horaFim}
+            onChange={(e) => setHoraFim(e.target.value)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="alm">Almoço (min)</Label>
+          <Input
+            id="alm"
+            type="number"
+            min={0}
+            value={almoco}
+            onChange={(e) => setAlmoco(e.target.value)}
+          />
+        </div>
       </div>
 
       <DialogFooter className="mt-2">

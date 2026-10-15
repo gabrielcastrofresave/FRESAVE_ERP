@@ -1,6 +1,12 @@
 // src/app/api.ts (COMPLETO)
 import { createClient } from "@supabase/supabase-js";
 import {
+  TIPOS_REFERENCIA,
+  montarCodigo,
+  montarReferencia,
+  type TipoReferencia,
+} from "./referencias";
+import {
   projectId,
   publicAnonKey,
 } from "../../utils/supabase/info";
@@ -1031,6 +1037,33 @@ const getDistinctColumn = async (
   return Array.from(values).map((v) => String(v));
 };
 
+// Próximo número livre para o tipo (e ano, quando o tipo usa ano).
+// Não filtra os eliminados, para nunca reutilizar um número.
+export async function proximoNumeroReferencia(
+  tipo: TipoReferencia,
+  ano: number,
+): Promise<number> {
+  let q = supabase
+    .from("jobs")
+    .select("wintouch_numdoc")
+    .eq("wintouch_tipo", tipo);
+  if (TIPOS_REFERENCIA[tipo].comAno) {
+    q = q.eq("wintouch_serie", String(ano));
+  }
+  const { data, error } = await q;
+  if (error) throw error;
+
+  const maior = (data ?? []).reduce((max: number, r: any) => {
+    const n = parseInt(
+      String(r.wintouch_numdoc ?? "").trim(),
+      10,
+    );
+    return Number.isNaN(n) ? max : Math.max(max, n);
+  }, 0);
+
+  return maior + 1;
+}
+
 export const jobsAPI = {
   // Todos os trabalhos ativos (sem os eliminados)
   getAll: async () => {
@@ -1160,7 +1193,7 @@ export const jobsAPI = {
   },
 
   create: async (job: {
-    reference?: string;
+    tipo: TipoReferencia;
     title: string;
     department?: string;
     assigneeIds?: string[];
@@ -1169,23 +1202,51 @@ export const jobsAPI = {
     maxHours?: number | null;
     nonStandard?: boolean;
   }) => {
-    const { data, error } = await supabase
-      .from("jobs")
-      .insert([
-        {
-          reference: job.reference || `JOB-${Date.now()}`,
-          title: job.title,
-          department: job.department || null,
-          non_standard: job.nonStandard ?? false,
-          description: job.description || null,
-          due_date: job.dueDate,
-          max_hours: job.maxHours ?? null,
-          status: "em_curso",
-        },
-      ])
-      .select()
-      .single();
-    if (error) throw error;
+    const ano = new Date().getFullYear();
+    const cfg = TIPOS_REFERENCIA[job.tipo];
+
+    // Se outro utilizador gravar o mesmo número ao mesmo tempo, o índice
+    // único falha (23505) e tentamos de novo com o número seguinte
+    let data: any = null;
+    for (
+      let tentativa = 0;
+      tentativa < 3 && !data;
+      tentativa++
+    ) {
+      const numero = await proximoNumeroReferencia(
+        job.tipo,
+        ano,
+      );
+      const codigo = montarCodigo(job.tipo, numero, ano);
+
+      const res = await supabase
+        .from("jobs")
+        .insert([
+          {
+            codigo,
+            reference: montarReferencia(job.tipo, numero, ano),
+            wintouch_tipo: job.tipo,
+            wintouch_serie: cfg.comAno ? String(ano) : null,
+            wintouch_numdoc: String(numero),
+            title: job.title,
+            department: job.department || null,
+            non_standard: job.nonStandard ?? false,
+            description: job.description || null,
+            due_date: job.dueDate,
+            max_hours: job.maxHours ?? null,
+            status: "em_curso",
+          },
+        ])
+        .select()
+        .single();
+
+      if (!res.error) data = res.data;
+      else if (res.error.code !== "23505") throw res.error;
+    }
+    if (!data)
+      throw new Error(
+        "Não foi possível gerar um código único. Tenta novamente.",
+      );
 
     if (job.assigneeIds && job.assigneeIds.length > 0) {
       const payload = job.assigneeIds.map((userId) => ({
@@ -1198,7 +1259,6 @@ export const jobsAPI = {
       if (assigneesError) throw assigneesError;
     }
 
-    // Fases do departamento escolhido (Assistência não tem)
     const keys = getChecklistKeys(job.department);
     if (keys.length > 0) {
       const checklistPayload = keys.map((key) => ({
@@ -1416,15 +1476,20 @@ function rowHours(r: any): number {
 export const productionTasksAPI = {
   getAll: async (from?: string, to?: string) => {
     const buildQuery = () => {
-      let q = supabase.from("production_task_assignees")
-        .select(`
-        id, task_id, user_id, hora_inicio, hora_fim, almoco_minutos, horas_liquidas,
-        wintouch_custo, wintouch_nome,
-        users ( nome ),
-        production_tasks!inner (
-          tipo, job_id, titulo, cliente_obra, local, data, created_by, origem_wintouch,
-          jobs ( title, reference )        )
-      `);
+      let q = supabase
+        .from("production_task_assignees")
+        .select(
+          `
+    id, task_id, user_id, hora_inicio, hora_fim, almoco_minutos, horas_liquidas,
+    wintouch_custo, wintouch_nome,
+    users ( nome ),
+    production_tasks!inner (
+      tipo, job_id, titulo, cliente_obra, local, data, created_by, origem_wintouch,
+      jobs ( title, reference )
+    )
+  `,
+        )
+        .is("deleted_at", null);
       if (from) q = q.gte("production_tasks.data", from);
       if (to) q = q.lte("production_tasks.data", to);
       return q.order("data", {
@@ -1463,8 +1528,9 @@ export const productionTasksAPI = {
         row.production_tasks?.titulo ||
         row.production_tasks?.jobs?.title ||
         "(sem título)",
-            trabalho: row.production_tasks?.jobs?.title || null,
-      codigo_trabalho: row.production_tasks?.jobs?.reference || null,
+      trabalho: row.production_tasks?.jobs?.title || null,
+      codigo_trabalho:
+        row.production_tasks?.jobs?.reference || null,
       cliente_obra: row.production_tasks?.cliente_obra,
       local: row.production_tasks?.local,
       data: row.production_tasks?.data,
@@ -1514,6 +1580,7 @@ export const productionTasksAPI = {
           task.horaFim,
           task.almocoMinutos,
         ),
+        status: "concluido",
       }));
       const { error: assigneesError } = await supabase
         .from("production_task_assignees")
@@ -1583,17 +1650,23 @@ export const productionTasksAPI = {
   deleteAssignee: async (assigneeId: string) => {
     const { error } = await supabase
       .from("production_task_assignees")
-      .delete()
+      .update({ deleted_at: new Date().toISOString() })
       .eq("id", assigneeId);
     if (error) throw error;
   },
 
   deleteTask: async (taskId: string) => {
-    const { error } = await supabase
-      .from("production_tasks")
-      .delete()
-      .eq("id", taskId);
+    const { data, error } = await supabase
+      .from("production_task_assignees")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("task_id", taskId)
+      .is("deleted_at", null)
+      .select("id");
     if (error) throw error;
+    if (!data || data.length === 0)
+      throw new Error(
+        "Nada foi apagado (sem permissão ou já apagado).",
+      );
   },
 };
 

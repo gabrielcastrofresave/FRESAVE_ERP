@@ -16,6 +16,13 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Badge } from "../components/ui/badge";
+import { proximoNumeroReferencia } from "../api";
+import {
+  TIPOS_LISTA,
+  TIPOS_REFERENCIA,
+  montarCodigo,
+  type TipoReferencia,
+} from "../referencias";
 import {
   Dialog,
   DialogContent,
@@ -1173,11 +1180,12 @@ function JobForm({
   onSaved: () => Promise<void>;
 }) {
   const [loading, setLoading] = useState(false);
+  const [tipo, setTipo] = useState<TipoReferencia>("PROD");
+  const [preview, setPreview] = useState("");
   const [selectedDept, setSelectedDept] = useState<string>(
-    job?.department || "FÁBRICA",
+    job?.department || "FABRICA",
   );
   const [form, setForm] = useState({
-    reference: job?.reference || "",
     title: job?.title || "",
     dueDate: localDateTimeInput(job?.due_date),
     maxHours:
@@ -1186,6 +1194,24 @@ function JobForm({
 
   const update = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
+
+  // Ao criar: mostra o código que vai ser gerado, e recalcula quando muda o tipo
+  useEffect(() => {
+    if (job) return;
+    let ativo = true;
+    const ano = new Date().getFullYear();
+    setPreview("");
+    proximoNumeroReferencia(tipo, ano)
+      .then((n) => {
+        if (ativo) setPreview(montarCodigo(tipo, n, ano));
+      })
+      .catch((err) =>
+        console.error("Erro ao calcular código:", err),
+      );
+    return () => {
+      ativo = false;
+    };
+  }, [tipo, job]);
 
   const checklistForDept =
     DEPARTMENT_CHECKLIST_MAP[selectedDept as Department];
@@ -1200,26 +1226,22 @@ function JobForm({
           title: form.title,
           department: selectedDept,
           dueDate: new Date(form.dueDate).toISOString(),
-          maxHours: form.maxHours
-            ? Number(form.maxHours)
-            : null,
+          maxHours: form.maxHours ? Number(form.maxHours) : null,
         });
       } else {
         await jobsAPI.create({
-          reference: form.reference || undefined,
+          tipo,
           title: form.title,
           department: selectedDept,
           dueDate: new Date(form.dueDate).toISOString(),
-          maxHours: form.maxHours
-            ? Number(form.maxHours)
-            : null,
+          maxHours: form.maxHours ? Number(form.maxHours) : null,
         });
       }
       await onSaved();
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Erro ao guardar trabalho:", error);
-      alert("Erro ao guardar trabalho.");
+      alert(error?.message || "Erro ao guardar trabalho.");
     } finally {
       setLoading(false);
     }
@@ -1229,18 +1251,34 @@ function JobForm({
     <form className="mt-3 grid gap-4" onSubmit={submit}>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
-          <Label htmlFor="reference">
-            Referência (opcional)
-          </Label>
-          <Input
-            id="reference"
-            value={form.reference}
-            onChange={(e) =>
-              update("reference", e.target.value)
-            }
-            placeholder="Gerada automaticamente"
-            disabled={Boolean(job)}
-          />
+          <Label htmlFor="tipo-ref">Tipo de referência *</Label>
+          {job ? (
+            <Input
+              id="tipo-ref"
+              value={job.codigo || job.reference || ""}
+              disabled
+            />
+          ) : (
+            <>
+              <select
+                id="tipo-ref"
+                value={tipo}
+                onChange={(e) =>
+                  setTipo(e.target.value as TipoReferencia)
+                }
+                className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              >
+                {TIPOS_LISTA.map((t) => (
+                  <option key={t} value={t}>
+                    {TIPOS_REFERENCIA[t].label} ({t})
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Código: <strong>{preview || "…"}</strong>
+              </p>
+            </>
+          )}
         </div>
         <div className="space-y-2">
           <Label htmlFor="dueDate">Prazo Limite *</Label>
@@ -1253,8 +1291,9 @@ function JobForm({
           />
         </div>
       </div>
+
       <div className="space-y-2">
-        <Label htmlFor="title">Título do Trabalho *</Label>
+        <Label htmlFor="title">Nome do trabalho *</Label>
         <Input
           id="title"
           value={form.title}
@@ -1263,6 +1302,7 @@ function JobForm({
           required
         />
       </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="department">Departamento *</Label>
@@ -1303,9 +1343,7 @@ function JobForm({
           </p>
           <ul className="mt-1.5 space-y-0.5 text-xs text-zinc-500 dark:text-zinc-400">
             {checklistForDept?.map((key) => (
-              <li key={key}>
-                • {CHECKLIST_LABELS[key] || key}
-              </li>
+              <li key={key}>• {CHECKLIST_LABELS[key] || key}</li>
             ))}
           </ul>
         </div>
@@ -1324,11 +1362,7 @@ function JobForm({
       )}
 
       <div className="mt-2 flex justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onClose}
-        >
+        <Button type="button" variant="outline" onClick={onClose}>
           Cancelar
         </Button>
         <Button
@@ -1336,15 +1370,14 @@ function JobForm({
           className="bg-red-600 hover:bg-red-700"
           disabled={loading}
         >
-          {loading && (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          )}
+          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {job ? "Guardar Alterações" : "Criar Trabalho"}
         </Button>
       </div>
     </form>
   );
 }
+
 function DeleteJobForm({
   job,
   onClose,
