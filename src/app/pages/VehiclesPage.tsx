@@ -1,6 +1,6 @@
 // src/app/pages/VehiclesPage.tsx
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useApp } from "../AppContext";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -20,7 +20,11 @@ import {
   Trash2,
   Search,
   Car,
+  FileText,
+  UploadCloud,
+  ExternalLink,
 } from "lucide-react";
+import { vehicleFilesAPI } from "../api";
 
 const STATUS_STYLES: Record<string, string> = {
   disponivel:
@@ -39,6 +43,17 @@ const STATUS_LABELS: Record<string, string> = {
   manutencao: "Em Manutenção",
   avaria: "Em Avaria",
 };
+
+const TIPOS_FICHEIRO_UI = [
+  { value: "livrete", label: "Livrete" },
+  { value: "seguro", label: "Seguro" },
+  { value: "inspecao", label: "Inspeção" },
+  { value: "folha_manutencao", label: "Folha de manutenção" },
+  { value: "outro", label: "Outro" },
+];
+
+const labelTipo = (v: string) =>
+  TIPOS_FICHEIRO_UI.find((t) => t.value === v)?.label ?? v;
 
 export function VehiclesPage() {
   const {
@@ -503,7 +518,7 @@ export function VehiclesPage() {
           open={viewModalOpen}
           onOpenChange={setViewModalOpen}
         >
-          <DialogContent className="sm:max-w-lg">
+          <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>
                 Viatura — {selectedVehicleForView.matricula}
@@ -600,6 +615,11 @@ export function VehiclesPage() {
                 </div>
               )}
 
+              <VehicleFilesSection
+                vehicleId={selectedVehicleForView.id}
+                canManage={canCreate}
+              />
+
               <div className="flex justify-end border-t pt-3">
                 <Button
                   onClick={() => setViewModalOpen(false)}
@@ -639,6 +659,364 @@ function MiniMetric({
       >
         {value}
       </p>
+    </div>
+  );
+}
+
+// ===== Ficheiros da viatura =====
+
+const IMAGE_EXT = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"];
+
+const fileExt = (name?: string) =>
+  (name?.split(".").pop() || "").toLowerCase();
+
+const isImageFile = (f: any) =>
+  (f.mime_type || "").startsWith("image/") ||
+  IMAGE_EXT.includes(fileExt(f.nome_original));
+
+const isPdfFile = (f: any) =>
+  f.mime_type === "application/pdf" ||
+  fileExt(f.nome_original) === "pdf";
+
+const formatBytes = (n?: number | null) => {
+  if (!n) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+function VehicleFilesSection({
+  vehicleId,
+  canManage,
+}: {
+  vehicleId: string;
+  canManage: boolean;
+}) {
+  const [files, setFiles] = useState<any[]>([]);
+  const [tipo, setTipo] = useState("livrete");
+  const [uploading, setUploading] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const previewFile =
+    files.find((f) => f.id === previewId) ?? null;
+
+  const load = async () => {
+    try {
+      setError(null);
+      setFiles(await vehicleFilesAPI.list(vehicleId));
+    } catch (e: any) {
+      setError(e.message);
+    }
+  };
+
+  useEffect(() => {
+    setFiles([]);
+    setPreviewId(null);
+    load();
+  }, [vehicleId]);
+
+  // PDFs: carregados como blob para o browser os poder mostrar na pré-visualização
+  useEffect(() => {
+    setPdfBlobUrl(null);
+    if (!previewFile || !isPdfFile(previewFile) || !previewFile.url)
+      return;
+
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    fetch(previewFile.url)
+      .then((r) => r.blob())
+      .then((b) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(
+          new Blob([b], { type: "application/pdf" }),
+        );
+        setPdfBlobUrl(objectUrl);
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [previewId, previewFile?.url]);
+
+  const uploadFiles = async (list: FileList | File[]) => {
+    const arr = Array.from(list);
+    if (arr.length === 0) return;
+    setUploading(true);
+    setError(null);
+    try {
+      for (const file of arr) {
+        await vehicleFilesAPI.upload(vehicleId, file, tipo);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+      await load();
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    if (!canManage || uploading) return;
+    uploadFiles(e.dataTransfer.files);
+  };
+
+  const handleDeleteFile = async (fileId: string) => {
+    if (!confirm("Eliminar este ficheiro?")) return;
+    try {
+      await vehicleFilesAPI.remove(vehicleId, fileId);
+      if (previewId === fileId) setPreviewId(null);
+      await load();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  // Abrir a pré-visualização e renovar os links (que expiram ao fim de 5 min)
+  const openPreview = (fileId: string) => {
+    setPreviewId(fileId);
+    load();
+  };
+
+  return (
+    <div className="space-y-3 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+          Ficheiros
+        </p>
+        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+          {files.length}{" "}
+          {files.length === 1 ? "ficheiro" : "ficheiros"}
+        </span>
+      </div>
+
+      {canManage && (
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!dragging) setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={handleDrop}
+          className={`rounded-lg border border-dashed p-3 transition-colors ${
+            dragging
+              ? "border-red-400 bg-red-50 dark:border-red-700 dark:bg-red-950/20"
+              : "border-zinc-300 bg-zinc-50/60 dark:border-zinc-700 dark:bg-zinc-800/40"
+          }`}
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <select
+              value={tipo}
+              onChange={(e) => setTipo(e.target.value)}
+              className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+            >
+              {TIPOS_FICHEIRO_UI.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => inputRef.current?.click()}
+              className="flex h-9 flex-1 items-center justify-center gap-2 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-600 transition-colors hover:border-red-300 hover:text-red-600 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+            >
+              <UploadCloud className="h-4 w-4" />
+              {uploading
+                ? "A carregar…"
+                : "Escolher ou largar ficheiros aqui"}
+            </button>
+
+            <input
+              ref={inputRef}
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(e) =>
+                e.target.files && uploadFiles(e.target.files)
+              }
+            />
+          </div>
+        </div>
+      )}
+
+      {files.length === 0 ? (
+        <p className="rounded-lg border border-zinc-100 py-6 text-center text-sm text-zinc-400 dark:border-zinc-800">
+          Sem ficheiros anexados.
+        </p>
+      ) : (
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {files.map((f) => (
+            <li
+              key={f.id}
+              className="group overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+            >
+              <button
+                type="button"
+                onClick={() => openPreview(f.id)}
+                className="relative block h-28 w-full overflow-hidden bg-zinc-100 dark:bg-zinc-800"
+                title="Pré-visualizar"
+              >
+                {isImageFile(f) && f.url ? (
+                  <img
+                    src={f.url}
+                    alt={f.nome_original}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="flex h-full w-full flex-col items-center justify-center gap-1 text-zinc-400">
+                    <FileText className="h-8 w-8" />
+                    <span className="text-[10px] font-semibold uppercase tracking-wider">
+                      {fileExt(f.nome_original) || "ficheiro"}
+                    </span>
+                  </div>
+                )}
+              </button>
+
+              <div className="space-y-1.5 p-2.5">
+                <p
+                  className="truncate text-xs font-medium text-zinc-800 dark:text-zinc-100"
+                  title={f.nome_original}
+                >
+                  {f.nome_original}
+                </p>
+
+                <div className="flex items-center justify-between gap-1">
+                  <Badge className="border-zinc-200 bg-zinc-50 px-1.5 py-0 text-[10px] font-medium text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+                    {labelTipo(f.tipo)}
+                  </Badge>
+
+                  <div className="flex items-center">
+                    {f.url && (
+                      <a
+                        href={f.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="Abrir noutro separador"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                    {canManage && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Eliminar"
+                        className="h-7 w-7 text-zinc-400 hover:bg-red-50 hover:text-red-600"
+                        onClick={() => handleDeleteFile(f.id)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                <p className="text-[10px] text-zinc-400">
+                  {new Date(f.data_upload).toLocaleDateString(
+                    "pt-PT",
+                  )}
+                  {f.tamanho_bytes
+                    ? ` · ${formatBytes(f.tamanho_bytes)}`
+                    : ""}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+
+      {/* Pré-visualização grande */}
+      <Dialog
+        open={!!previewFile}
+        onOpenChange={(open) => {
+          if (!open) setPreviewId(null);
+        }}
+      >
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="truncate pr-6">
+              {previewFile?.nome_original}
+            </DialogTitle>
+            <DialogDescription>
+              {previewFile
+                ? `${labelTipo(previewFile.tipo)} · ${new Date(
+                    previewFile.data_upload,
+                  ).toLocaleDateString("pt-PT")}`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          {previewFile && isImageFile(previewFile) && previewFile.url && (
+            <img
+              src={previewFile.url}
+              alt={previewFile.nome_original}
+              className="max-h-[65vh] w-full rounded-md bg-zinc-100 object-contain dark:bg-zinc-800"
+            />
+          )}
+
+          {previewFile && isPdfFile(previewFile) && (
+            <>
+              {pdfBlobUrl ? (
+                <iframe
+                  src={pdfBlobUrl}
+                  title={previewFile.nome_original}
+                  className="h-[65vh] w-full rounded-md border border-zinc-200 dark:border-zinc-700"
+                />
+              ) : (
+                <div className="flex h-40 items-center justify-center text-sm text-zinc-400">
+                  A carregar pré-visualização…
+                </div>
+              )}
+            </>
+          )}
+
+          {previewFile &&
+            !isImageFile(previewFile) &&
+            !isPdfFile(previewFile) && (
+              <div className="flex h-40 flex-col items-center justify-center gap-2 rounded-md bg-zinc-50 text-sm text-zinc-500 dark:bg-zinc-800">
+                <FileText className="h-8 w-8 text-zinc-300" />
+                Sem pré-visualização para este tipo de ficheiro.
+              </div>
+            )}
+
+          <div className="flex justify-end gap-2">
+            {previewFile?.url && (
+              <a
+                href={previewFile.url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Button variant="outline" type="button">
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Abrir noutro separador
+                </Button>
+              </a>
+            )}
+            <Button
+              type="button"
+              onClick={() => setPreviewId(null)}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Fechar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

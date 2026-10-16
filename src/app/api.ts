@@ -10,11 +10,10 @@ import {
   projectId,
   publicAnonKey,
 } from "../../utils/supabase/info";
-const WINTOUCH_BASE_URL =
-  "https://o-teu-servidor-wintouch.com/api/v1";
-const WINTOUCH_ENTERPRISE = "O-TEU-ID-DE-EMPRESA";
 
 const supabaseUrl = `https://${projectId}.supabase.co`;
+const API_BASE = `${supabaseUrl}/functions/v1/make-server-da342d80`;
+const TOKEN_KEY = "fresave_token";
 
 export const supabase = createClient(
   supabaseUrl,
@@ -80,29 +79,26 @@ export const authAPI = {
     return { user };
   },
 
-  // Login por número OU email + senha
+  // Login por número OU email + senha (agora validado na edge function)
   login: async (data: {
     identifier: string;
     senha: string;
   }) => {
-    const { data: user, error } = await supabase
-      .from("users")
-      .select("*")
-      .or(
-        `numero.eq.${data.identifier},email.eq.${data.identifier}`,
-      )
-      .eq("senha", data.senha)
-      .maybeSingle();
-
-    if (error || !user)
-      throw new Error("Credenciais inválidas");
-    if (!user.ativo) throw new Error("Utilizador inativo");
-
-    return { access_token: user.id, user };
+    const body = await callApi("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({
+        identifier: data.identifier,
+        senha: data.senha,
+      }),
+    });
+    tokenStore.set(body.token);
+    // access_token continua a ser o id do utilizador, como antes
+    return { access_token: body.user.id, user: body.user };
   },
 
   logout: async () => {
     setAuthToken(null);
+    tokenStore.clear();
   },
 
   updateUser: async (
@@ -169,88 +165,81 @@ export const usersAPI = {
   },
 };
 
-//Vehicles API
+export const tokenStore = {
+  get: () => localStorage.getItem(TOKEN_KEY),
+  set: (t: string) => localStorage.setItem(TOKEN_KEY, t),
+  clear: () => localStorage.removeItem(TOKEN_KEY),
+};
+
+// Authorization = anon key (exigida pelo gateway do Supabase)
+// X-App-Token   = token da sessão própria (é este que a edge function valida)
+async function callApi(
+  path: string,
+  init: RequestInit = {},
+  isJson = true,
+) {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${publicAnonKey}`,
+    "X-App-Token": tokenStore.get() ?? "",
+  };
+  if (isJson) headers["Content-Type"] = "application/json";
+
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers,
+  });
+  const body = await res.json().catch(() => ({}));
+
+  if (res.status === 401) tokenStore.clear(); // sessão expirada/inválida
+  if (!res.ok)
+    throw new Error(body.error ?? `Erro ${res.status}`);
+  return body;
+}
+
+
+
 export const vehiclesAPI = {
-  getAll: async () => {
-    const { data, error } = await supabase
-      .from("vehicles")
-      .select("*")
-      .order("id", { ascending: true });
+  getAll: () => callApi("/vehicles"), // { vehicles }
+  create: async (data: any) =>
+    (
+      await callApi("/vehicles", {
+        method: "POST",
+        body: JSON.stringify(data),
+      })
+    ).vehicle,
+  update: (id: string, data: Partial<any>) =>
+    callApi(`/vehicles/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) =>
+    callApi(`/vehicles/${id}`, { method: "DELETE" }),
+};
 
-    if (error) throw error;
-
-    const vehicles = (data || []).map((veh: any) => ({
-      id: veh.id,
-      matricula: veh.matricula,
-      marca: veh.marca,
-      modelo: veh.modelo,
-      ano: veh.ano,
-      status: veh.status,
-      seguradora: veh.seguradora,
-      dataSeguro: veh.data_seguro,
-      dataInspecao: veh.data_inspecao,
-      especificacoes: veh.especificacoes,
-    }));
-    return { vehicles };
+export const vehicleFilesAPI = {
+  list: (vehicleId: string) =>
+    callApi(`/vehicles/${vehicleId}/files`),
+  upload: (
+    vehicleId: string,
+    file: File,
+    tipo: string,
+    notas?: string,
+  ) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("tipo", tipo);
+    if (notas) fd.append("notas", notas);
+    // sem Content-Type: o browser define-o com o boundary
+    return callApi(
+      `/vehicles/${vehicleId}/files`,
+      { method: "POST", body: fd },
+      false,
+    );
   },
-
-  create: async (data: any) => {
-    const payload = {
-      matricula: data.matricula,
-      marca: data.marca,
-      modelo: data.modelo,
-      ano: data.ano,
-      status: data.status || "disponivel",
-      seguradora: data.seguradora,
-      data_seguro: data.dataSeguro,
-      data_inspecao: data.dataInspecao,
-      especificacoes: data.especificacoes,
-    };
-
-    const { error } = await supabase
-      .from("vehicles")
-      .insert([payload]);
-    if (error) throw error;
-  },
-
-  update: async (id: string, vehicle: Partial<any>) => {
-    const payload: any = {};
-
-    if (vehicle.matricula !== undefined)
-      payload.matricula = vehicle.matricula;
-    if (vehicle.marca !== undefined)
-      payload.marca = vehicle.marca;
-    if (vehicle.modelo !== undefined)
-      payload.modelo = vehicle.modelo;
-    if (vehicle.ano !== undefined) payload.ano = vehicle.ano;
-    if (vehicle.status !== undefined)
-      payload.status = vehicle.status;
-    if (vehicle.seguradora !== undefined)
-      payload.seguradora = vehicle.seguradora;
-    if (vehicle.dataSeguro !== undefined)
-      payload.data_seguro = vehicle.dataSeguro;
-    if (vehicle.dataInspecao !== undefined)
-      payload.data_inspecao = vehicle.dataInspecao;
-    if (vehicle.especificacoes !== undefined)
-      payload.especificacoes = vehicle.especificacoes;
-
-    if (Object.keys(payload).length === 0) return;
-
-    const { error } = await supabase
-      .from("vehicles")
-      .update(payload)
-      .eq("id", id);
-
-    if (error) throw error;
-  },
-
-  delete: async (id: string) => {
-    const { error } = await supabase
-      .from("vehicles")
-      .delete()
-      .eq("id", id);
-    if (error) throw error;
-  },
+  remove: (vehicleId: string, fileId: string) =>
+    callApi(`/vehicles/${vehicleId}/files/${fileId}`, {
+      method: "DELETE",
+    }),
 };
 
 // Equipment API
