@@ -25,6 +25,8 @@ import { JobPicker } from "../components/JobPicker";
 import {
   ChevronLeft,
   ChevronRight,
+  FileSpreadsheet,
+  FileText,
   Loader2,
   Plus,
 } from "lucide-react";
@@ -176,6 +178,256 @@ function formatHours(mins: number) {
   })} h`;
 }
 
+// ---------- Exportação (Excel / Word) ----------
+
+// Período exportado: dia e semana = o que se vê; mês = só os dias do mês
+// (a grelha do mês mostra também dias dos meses vizinhos)
+function periodoExport(view: ViewMode, cursor: Date) {
+  if (view === "mes") {
+    const y = cursor.getFullYear();
+    const m = cursor.getMonth();
+    return {
+      from: toDateInput(new Date(y, m, 1)),
+      to: toDateInput(new Date(y, m + 1, 0)),
+    };
+  }
+  return periodoVisivel(view, cursor);
+}
+
+function formatDataCurta(chave: string) {
+  const [y, m, d] = chave.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+// 510 min -> "8,50" (vírgula decimal: o Excel em PT lê como número)
+function formatHorasNumero(mins: number) {
+  return (mins / 60).toLocaleString("pt-PT", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function almocoTexto(min?: number | null) {
+  if (min == null) return "-";
+  if (min === 0) return "Não";
+  return `${min} min`;
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// CSV com ";" e BOM: abre direto no Excel com os acentos certos
+function downloadCsv(
+  filename: string,
+  headers: string[],
+  rows: (string | number)[][],
+) {
+  const escapeCell = (value: string | number) => {
+    let str = String(value ?? "");
+    // evita que o Excel interprete texto como fórmula
+    if (/^[=+@]|^-(?=\w)/.test(str)) str = `'${str}`;
+    if (/[;"\r\n]/.test(str))
+      return `"${str.replace(/"/g, '""')}"`;
+    return str;
+  };
+  const lines = [
+    headers.map(escapeCell).join(";"),
+    ...rows.map((row) => row.map(escapeCell).join(";")),
+  ];
+  downloadBlob(
+    new Blob(["﻿" + lines.join("\r\n")], {
+      type: "text/csv;charset=utf-8;",
+    }),
+    filename,
+  );
+}
+
+// Registos do período, ordenados, com as horas líquidas já calculadas
+function buildExport(
+  rows: any[],
+  view: ViewMode,
+  cursor: Date,
+) {
+  const { from, to } = periodoExport(view, cursor);
+  const linhas = rows
+    .filter((r) => {
+      const k = chaveDia(r);
+      return k >= from && k <= to;
+    })
+    .sort(
+      (a, b) =>
+        chaveDia(a).localeCompare(chaveDia(b)) ||
+        String(a.hora_inicio ?? "").localeCompare(
+          String(b.hora_inicio ?? ""),
+        ),
+    )
+    .map((r) => ({
+      chave: chaveDia(r),
+      data: formatDataCurta(chaveDia(r)),
+      titulo: r.titulo || "(sem título)",
+      inicio: r.hora_inicio?.slice(0, 5) ?? "",
+      fim: r.hora_fim?.slice(0, 5) ?? "",
+      almoco: almocoTexto(r.almoco_minutos),
+      mins:
+        netMinutes(
+          r.hora_inicio,
+          r.hora_fim,
+          r.almoco_minutos,
+        ) ?? 0,
+    }));
+  const total = linhas.reduce((s, l) => s + l.mins, 0);
+  return { from, to, linhas, total };
+}
+
+function exportarExcel(
+  rows: any[],
+  view: ViewMode,
+  cursor: Date,
+) {
+  const d = buildExport(rows, view, cursor);
+  if (d.linhas.length === 0) {
+    alert("Sem registos neste período.");
+    return;
+  }
+  const linhas: (string | number)[][] = d.linhas.map((l) => [
+    l.data,
+    l.titulo,
+    l.inicio,
+    l.fim,
+    l.almoco,
+    formatHorasNumero(l.mins),
+  ]);
+  linhas.push(["", "", "", "", "", ""]);
+  linhas.push([
+    "TOTAL",
+    "",
+    "",
+    "",
+    "",
+    formatHorasNumero(d.total),
+  ]);
+  downloadCsv(
+    `atividade_${d.from}_${d.to}.csv`,
+    ["Data", "Título", "Início", "Fim", "Almoço", "Horas"],
+    linhas,
+  );
+}
+
+function exportarWord(
+  rows: any[],
+  view: ViewMode,
+  cursor: Date,
+  periodoTitulo: string,
+  nomeUtilizador: string,
+) {
+  const d = buildExport(rows, view, cursor);
+  if (d.linhas.length === 0) {
+    alert("Sem registos neste período.");
+    return;
+  }
+
+  const td = "padding:6px 10px; border:1px solid #e4e4e7;";
+  const tdR = `${td} text-align:right;`;
+
+  const linhasHtml = d.linhas
+    .map(
+      (l) => `
+        <tr>
+          <td style="${td}">${escapeHtml(l.data)}</td>
+          <td style="${td}">${escapeHtml(l.titulo)}</td>
+          <td style="${td}">${escapeHtml(l.inicio)}–${escapeHtml(l.fim)}</td>
+          <td style="${td}">${escapeHtml(l.almoco)}</td>
+          <td style="${tdR} font-weight:bold;">${formatHorasNumero(l.mins)} h</td>
+        </tr>`,
+    )
+    .join("");
+
+  // Resumo por dia (só em semana/mês)
+  let resumoHtml = "";
+  if (view !== "dia") {
+    const porDia = new Map<string, number>();
+    for (const l of d.linhas) {
+      porDia.set(l.chave, (porDia.get(l.chave) ?? 0) + l.mins);
+    }
+    const linhasResumo = [...porDia.entries()]
+      .map(
+        ([chave, mins]) => `
+        <tr>
+          <td style="${td}">${formatDataCurta(chave)}</td>
+          <td style="${tdR} font-weight:bold;">${formatHorasNumero(mins)} h</td>
+        </tr>`,
+      )
+      .join("");
+    resumoHtml = `
+        <h2>Resumo por dia</h2>
+        <table>
+          <tr><th>Data</th><th style="text-align:right;">Horas</th></tr>
+          ${linhasResumo}
+        </table>`;
+  }
+
+  const html = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
+      <head>
+        <meta charset="utf-8">
+        <title>Atividade - ${escapeHtml(periodoTitulo)}</title>
+        <style>
+          body { font-family: Calibri, Arial, sans-serif; color: #18181b; margin: 0; }
+          .header { padding: 0 0 18px; border-bottom: 3px solid #dc2626; margin-bottom: 26px; }
+          .doc-title { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #dc2626; font-weight: bold; margin: 0 0 4px; }
+          h1 { color: #18181b; margin: 0; font-size: 24px; }
+          .sub { color: #71717a; font-size: 13px; margin: 6px 0 0; }
+          h2 { font-size: 12px; color: #dc2626; text-transform: uppercase; letter-spacing: 1.5px; border-bottom: 2px solid #f4f4f5; padding-bottom: 8px; margin-top: 30px; margin-bottom: 12px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
+          th { background: #f4f4f5; text-align: left; padding: 6px 10px; border: 1px solid #e4e4e7; font-size: 11px; text-transform: uppercase; color: #71717a; }
+        </style>
+      </head>
+      <body style="padding: 30px 36px;">
+        <div class="header">
+          <p class="doc-title">Registo de Atividade</p>
+          <h1>${escapeHtml(nomeUtilizador || "Utilizador")}</h1>
+          <p class="sub">${escapeHtml(periodoTitulo)}</p>
+        </div>
+
+        <h2>Registos</h2>
+        <table>
+          <tr><th>Data</th><th>Título</th><th>Horário</th><th>Almoço</th><th style="text-align:right;">Horas</th></tr>
+          ${linhasHtml}
+        </table>
+        ${resumoHtml}
+
+        <p style="text-align:right; font-weight:bold; font-size:15px; margin-top:24px;">
+          Total de horas: ${formatHorasNumero(d.total)} h
+        </p>
+        <p style="color:#a1a1aa; font-size:10px;">
+          Horas líquidas: pausas de lanche (10:30–10:40 e 16:00–16:10) e almoço já descontados.
+        </p>
+      </body>
+      </html>
+    `;
+
+  downloadBlob(
+    new Blob(["﻿", html], { type: "application/msword" }),
+    `atividade_${d.from}_${d.to}.doc`,
+  );
+}
+
 export function MyActivityPage() {
   const { currentUser } = useApp();
   const userId = currentUser?.id;
@@ -217,12 +469,15 @@ export function MyActivityPage() {
 
   // Trabalhos: só quando um diálogo (criar/editar) abre pela primeira vez
   useEffect(() => {
-    if (!(createOpen || editingRow) || jobsPedidos.current) return;
+    if (!(createOpen || editingRow) || jobsPedidos.current)
+      return;
     jobsPedidos.current = true;
     jobsAPI
       .getAll()
       .then((data: any[]) =>
-        setJobs(data.filter((j: any) => j.status === "em_curso")),
+        setJobs(
+          data.filter((j: any) => j.status === "em_curso"),
+        ),
       )
       .catch((error: unknown) => {
         jobsPedidos.current = false;
@@ -240,8 +495,11 @@ export function MyActivityPage() {
       if (lista) lista.push(r);
       else porDia.set(chave, [r]);
       const liquidos =
-        netMinutes(r.hora_inicio, r.hora_fim, r.almoco_minutos) ??
-        0;
+        netMinutes(
+          r.hora_inicio,
+          r.hora_fim,
+          r.almoco_minutos,
+        ) ?? 0;
       totais.set(chave, (totais.get(chave) ?? 0) + liquidos);
     }
     return { rowsPorDia: porDia, totaisPorDia: totais };
@@ -352,22 +610,52 @@ export function MyActivityPage() {
               {title}
             </h2>
           </div>
-          <div className="flex rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
-            {(["dia", "semana", "mes"] as ViewMode[]).map(
-              (v) => (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  className={`rounded-md px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                    view === v
-                      ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-50"
-                      : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-                  }`}
-                >
-                  {v === "mes" ? "Mês" : v}
-                </button>
-              ),
-            )}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              disabled={loading}
+              onClick={() => exportarExcel(rows, view, cursor)}
+            >
+              <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />
+              Excel
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              disabled={loading}
+              onClick={() =>
+                exportarWord(
+                  rows,
+                  view,
+                  cursor,
+                  title,
+                  currentUser?.nome ?? "",
+                )
+              }
+            >
+              <FileText className="mr-1.5 h-3.5 w-3.5" />
+              Word
+            </Button>
+            <div className="flex rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
+              {(["dia", "semana", "mes"] as ViewMode[]).map(
+                (v) => (
+                  <button
+                    key={v}
+                    onClick={() => setView(v)}
+                    className={`rounded-md px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+                      view === v
+                        ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-50"
+                        : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    }`}
+                  >
+                    {v === "mes" ? "Mês" : v}
+                  </button>
+                ),
+              )}
+            </div>
           </div>
         </div>
 

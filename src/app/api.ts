@@ -196,8 +196,6 @@ async function callApi(
   return body;
 }
 
-
-
 export const vehiclesAPI = {
   getAll: () => callApi("/vehicles"), // { vehicles }
   create: async (data: any) =>
@@ -309,6 +307,22 @@ export const equipmentAPI = {
     if (error) throw error;
   },
 };
+
+// Colar no src/app/api.ts, a seguir ao  vehicleFilesAPI
+export const pushAPI = {
+  subscribe: (subscription: any) =>
+    callApi("/push/subscribe", {
+      method: "POST",
+      body: JSON.stringify({ subscription }),
+    }),
+  unsubscribe: (endpoint: string) =>
+    callApi("/push/unsubscribe", {
+      method: "POST",
+      body: JSON.stringify({ endpoint }),
+    }),
+  test: () => callApi("/push/test", { method: "POST" }),
+};
+
 // Calendar Events API
 export const calendarAPI = {
   getAll: async () => {

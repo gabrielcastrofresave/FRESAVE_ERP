@@ -1,13 +1,20 @@
 // src/app/pages/DashboardPage.tsx
-import { trackingAPI } from "../api";
-import { OrderStatusView } from "../components/OrderStatusView";
-import { useEffect, useMemo, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useApp } from "../AppContext";
 import {
   jobsAPI,
   productionTasksAPI,
+  trackingAPI,
   calcJobHoursConsumed,
 } from "../api";
+import { OrderStatusView } from "../components/OrderStatusView";
 import { Badge } from "../components/ui/badge";
 import {
   Dialog,
@@ -36,6 +43,17 @@ import {
   Search,
 } from "lucide-react";
 
+// ==================== CONSTANTES (fora do componente) ====================
+const CARD =
+  "overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900";
+
+const FLEET_STATUSES = [
+  "disponivel",
+  "em_uso",
+  "manutencao",
+  "avaria",
+] as const;
+
 const STATUS_STYLES: Record<string, string> = {
   disponivel:
     "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400",
@@ -54,21 +72,43 @@ const STATUS_LABELS: Record<string, string> = {
   avaria: "Em Avaria",
 };
 
-function formatDueDate(value: string) {
-  return new Intl.DateTimeFormat("pt-PT", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
+const TONE_NEUTRAL =
+  "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200";
+const TONE_BAD =
+  "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400";
+const TONE_GOOD =
+  "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400";
 
+const COLOR_NEUTRAL = "#3f3f46";
+const COLOR_BAD = "#dc2626";
+const COLOR_GOOD = "#16a34a";
+
+// Formatadores criados uma única vez (criar Intl.* é caro)
+const dueFormatter = new Intl.DateTimeFormat("pt-PT", {
+  day: "2-digit",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+const dateFormatter = new Intl.DateTimeFormat("pt-PT");
+
+const formatDueDate = (value: string) =>
+  dueFormatter.format(new Date(value));
+const formatDate = (value: string) =>
+  dateFormatter.format(new Date(value));
+
+// Data local (toISOString usa UTC e pode dar o dia errado perto da meia-noite)
 function todayInput() {
-  return new Date().toISOString().split("T")[0];
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 // ==================== GRÁFICO CIRCULAR ====================
-function CircularProgress({
+const RADIUS = 34;
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+
+const CircularProgress = memo(function CircularProgress({
   percent,
   label,
   sublabel,
@@ -80,10 +120,8 @@ function CircularProgress({
   color: string;
 }) {
   const clamped = Math.max(0, Math.min(100, percent));
-  const radius = 34;
-  const circumference = 2 * Math.PI * radius;
   const offset =
-    circumference - (clamped / 100) * circumference;
+    CIRCUMFERENCE - (clamped / 100) * CIRCUMFERENCE;
 
   return (
     <div className="flex flex-col items-center gap-2">
@@ -95,7 +133,7 @@ function CircularProgress({
           <circle
             cx="40"
             cy="40"
-            r={radius}
+            r={RADIUS}
             fill="none"
             strokeWidth="8"
             className="stroke-zinc-100 dark:stroke-zinc-800"
@@ -103,12 +141,12 @@ function CircularProgress({
           <circle
             cx="40"
             cy="40"
-            r={radius}
+            r={RADIUS}
             fill="none"
             strokeWidth="8"
             strokeLinecap="round"
             stroke={color}
-            strokeDasharray={circumference}
+            strokeDasharray={CIRCUMFERENCE}
             strokeDashoffset={offset}
             style={{
               transition: "stroke-dashoffset 0.5s ease",
@@ -129,8 +167,165 @@ function CircularProgress({
       </div>
     </div>
   );
-}
+});
 
+// ==================== CARTÃO DE PROGRESSO DE UM PROJETO ====================
+const JobProgressCard = memo(function JobProgressCard({
+  job,
+  assigneeRows,
+  now,
+}: {
+  job: any;
+  assigneeRows: any[];
+  now: number;
+}) {
+  const created = new Date(job.created_at).getTime();
+  const due = new Date(job.due_date).getTime();
+  const span = due - created;
+  const datePercent =
+    span > 0
+      ? ((now - created) / span) * 100
+      : now > due
+        ? 100
+        : 0;
+
+  const hoursConsumed = calcJobHoursConsumed(job, assigneeRows);
+  const hoursPercent = job.max_hours
+    ? (hoursConsumed / Number(job.max_hours)) * 100
+    : null;
+
+  const checklist: any[] = job.checklist ?? [];
+  const checklistDone = checklist.filter(
+    (c) => c.checked,
+  ).length;
+  const checklistPercent = checklist.length
+    ? (checklistDone / checklist.length) * 100
+    : 0;
+
+  return (
+    <div className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+      <p className="mb-3 truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
+        {job.title}
+      </p>
+      <div className="flex items-center justify-around">
+        <CircularProgress
+          percent={datePercent}
+          label="Prazo"
+          sublabel={formatDate(job.due_date)}
+          color={datePercent >= 100 ? COLOR_BAD : COLOR_NEUTRAL}
+        />
+        {hoursPercent !== null ? (
+          <CircularProgress
+            percent={hoursPercent}
+            label="Horas"
+            sublabel={`${hoursConsumed.toFixed(1)}/${job.max_hours}h`}
+            color={
+              hoursPercent >= 100 ? COLOR_BAD : COLOR_NEUTRAL
+            }
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-center">
+            <div className="grid h-20 w-20 place-items-center rounded-full border-8 border-dashed border-zinc-100 dark:border-zinc-800">
+              <span className="text-xs text-zinc-300">-</span>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
+                Horas
+              </p>
+              <p className="text-[11px] text-zinc-400">
+                sem limite
+              </p>
+            </div>
+          </div>
+        )}
+        <CircularProgress
+          percent={checklistPercent}
+          label="Checklist"
+          sublabel={`${checklistDone}/${checklist.length} fases`}
+          color={
+            checklistPercent >= 100 ? COLOR_GOOD : COLOR_NEUTRAL
+          }
+        />
+      </div>
+    </div>
+  );
+});
+
+// ==================== LINHAS DAS LISTAS ====================
+const UrgentJobRow = memo(function UrgentJobRow({
+  job,
+  now,
+}: {
+  job: any;
+  now: number;
+}) {
+  const overdue = new Date(job.due_date).getTime() < now;
+  return (
+    <div className="flex items-center gap-3 px-5 py-3">
+      <div
+        className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${
+          overdue
+            ? TONE_BAD
+            : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
+        }`}
+      >
+        <Clock3 className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
+          {job.title}
+        </p>
+        <p className="text-xs text-zinc-400">
+          {job.assignees?.length
+            ? job.assignees.map((a: any) => a.nome).join(", ") +
+              " · "
+            : ""}
+          Prazo: {formatDueDate(job.due_date)}
+        </p>
+      </div>
+      {overdue && (
+        <Badge className="border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400">
+          Atrasado
+        </Badge>
+      )}
+    </div>
+  );
+});
+
+const MovementRow = memo(function MovementRow({
+  m,
+}: {
+  m: any;
+}) {
+  const out = m.tipo === "levantamento";
+  return (
+    <div className="flex items-center gap-3 px-5 py-3">
+      <div
+        className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${
+          out
+            ? "bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400"
+            : TONE_GOOD
+        }`}
+      >
+        {out ? (
+          <ArrowUpFromLine className="h-4 w-4" />
+        ) : (
+          <ArrowDownToLine className="h-4 w-4" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
+          {m.item_nome || "Artigo removido"}
+        </p>
+        <p className="text-xs text-zinc-400">
+          {m.user_nome || "-"} · {m.quantidade} unid.
+        </p>
+      </div>
+    </div>
+  );
+});
+
+// ==================== PÁGINA ====================
 export function DashboardPage() {
   const {
     currentUser,
@@ -140,193 +335,172 @@ export function DashboardPage() {
     stockItems,
     stockMovements,
   } = useApp();
+
   const [trackOpen, setTrackOpen] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [jobs, setJobs] = useState<any[]>([]);
   const [assigneeRows, setAssigneeRows] = useState<any[]>([]);
   const [jobsLoading, setJobsLoading] = useState(true);
 
-  const loadJobs = () => {
-    setJobsLoading(true);
-    Promise.all([jobsAPI.getAll(), productionTasksAPI.getAll()])
-      .then(([jobsData, rowsData]) => {
-        setJobs(jobsData);
-        setAssigneeRows(rowsData);
-      })
-      .catch((err) =>
-        console.error("Erro ao carregar trabalhos:", err),
-      )
-      .finally(() => setJobsLoading(false));
-  };
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  // silent = true → atualiza sem mostrar o "A carregar…"
+  const loadJobs = useCallback(async (silent = false) => {
+    if (!silent) setJobsLoading(true);
+    try {
+      const [jobsData, rowsData] = await Promise.all([
+        jobsAPI.getAll(),
+        productionTasksAPI.getAll(),
+      ]);
+      if (!mounted.current) return;
+      setJobs(jobsData);
+      setAssigneeRows(rowsData);
+    } catch (err) {
+      console.error("Erro ao carregar trabalhos:", err);
+    } finally {
+      if (mounted.current) setJobsLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     loadJobs();
-  }, []);
+  }, [loadJobs]);
 
-  const activeJobs = useMemo(
-    () => jobs.filter((j: any) => j.status === "em_curso"),
-    [jobs],
-  );
-  const overdueJobs = useMemo(
-    () =>
-      activeJobs.filter(
-        (j: any) => new Date(j.due_date).getTime() < Date.now(),
-      ),
-    [activeJobs],
-  );
-  const upcomingJobs = useMemo(() => {
-    return [...activeJobs]
+  // Uma única passagem pelos trabalhos (antes eram 4 filtros/sorts por render)
+  const {
+    now,
+    activeJobs,
+    overdueCount,
+    upcomingJobs,
+    myJobs,
+  } = useMemo(() => {
+    const now = Date.now();
+    const myId = currentUser?.id;
+    const active: any[] = [];
+    const mine: any[] = [];
+    let overdue = 0;
+
+    for (const j of jobs) {
+      if (j.status !== "em_curso") continue;
+      active.push(j);
+      if (new Date(j.due_date).getTime() < now) overdue++;
+      if (
+        myId &&
+        j.assignees?.some((a: any) => a.id === myId)
+      ) {
+        mine.push(j);
+      }
+    }
+
+    const upcoming = [...active]
       .sort(
-        (a: any, b: any) =>
+        (a, b) =>
           new Date(a.due_date).getTime() -
           new Date(b.due_date).getTime(),
       )
       .slice(0, 5);
-  }, [activeJobs]);
 
-  const myJobs = useMemo(
+    return {
+      now,
+      activeJobs: active,
+      overdueCount: overdue,
+      upcomingJobs: upcoming,
+      myJobs: mine,
+    };
+  }, [jobs, currentUser?.id]);
+
+  // Frota: uma só passagem em vez de 6 filtros
+  const fleetCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      disponivel: 0,
+      em_uso: 0,
+      manutencao: 0,
+      avaria: 0,
+    };
+    for (const v of vehicles) {
+      if (v.status in counts) counts[v.status]++;
+    }
+    return counts;
+  }, [vehicles]);
+
+  const equipmentSemStock = useMemo(
     () =>
-      jobs.filter(
-        (j: any) =>
-          j.status === "em_curso" &&
-          j.assignees?.some(
-            (a: any) => a.id === currentUser?.id,
-          ),
-      ),
-    [jobs, currentUser?.id],
+      stockItems.filter((i: any) => Number(i.quantidade) <= 0)
+        .length,
+    [stockItems],
   );
 
-  const vehiclesEmAvaria = vehicles.filter(
-    (v: any) => v.status === "avaria",
-  ).length;
-  const vehiclesDisponiveis = vehicles.filter(
-    (v: any) => v.status === "disponivel",
-  ).length;
-  const equipmentSemStock = stockItems.filter(
-    (i: any) => Number(i.quantidade) <= 0,
-  ).length;
+  const activeUsers = useMemo(
+    () => users.filter((u: any) => u.ativo).length,
+    [users],
+  );
 
   const recentMovements = useMemo(
     () => stockMovements.slice(0, 6),
     [stockMovements],
   );
 
-  const stats = [
-    {
-      label: "Utilizadores Ativos",
-      value: users.filter((u: any) => u.ativo).length,
-      sub: `${users.length} total`,
-      icon: Users,
-      tone: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200",
-    },
-    {
-      label: "Viaturas",
-      value: vehicles.length,
-      sub: `${vehiclesDisponiveis} disponíveis`,
-      icon: Car,
-      tone: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200",
-    },
-    {
-      label: "Equipamentos",
-      value: equipment.length,
-      sub: `${equipmentSemStock} artigo(s) sem stock`,
-      icon: Package,
-      tone: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200",
-    },
-    {
-      label: "Trabalhos em Curso",
-      value: activeJobs.length,
-      sub:
-        overdueJobs.length > 0
-          ? `${overdueJobs.length} fora do prazo`
-          : "tudo dentro do prazo",
-      icon: Hammer,
-      tone:
-        overdueJobs.length > 0
-          ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400"
-          : "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400",
-    },
-  ];
-  function TrackLookupForm({
-    onClose,
-  }: {
-    onClose: () => void;
-  }) {
-    const [code, setCode] = useState("");
-    const [loading, setLoading] = useState(false);
-    const [job, setJob] = useState<any | null>(null);
-    const [notFound, setNotFound] = useState(false);
+  const stats = useMemo(
+    () => [
+      {
+        label: "Utilizadores Ativos",
+        value: activeUsers,
+        sub: `${users.length} total`,
+        icon: Users,
+        tone: TONE_NEUTRAL,
+      },
+      {
+        label: "Viaturas",
+        value: vehicles.length,
+        sub: `${fleetCounts.disponivel} disponíveis`,
+        icon: Car,
+        tone: TONE_NEUTRAL,
+      },
+      {
+        label: "Equipamentos",
+        value: equipment.length,
+        sub: `${equipmentSemStock} artigo(s) sem stock`,
+        icon: Package,
+        tone: TONE_NEUTRAL,
+      },
+      {
+        label: "Trabalhos em Curso",
+        value: activeJobs.length,
+        sub:
+          overdueCount > 0
+            ? `${overdueCount} fora do prazo`
+            : "tudo dentro do prazo",
+        icon: Hammer,
+        tone: overdueCount > 0 ? TONE_BAD : TONE_GOOD,
+      },
+    ],
+    [
+      activeUsers,
+      users.length,
+      vehicles.length,
+      fleetCounts.disponivel,
+      equipment.length,
+      equipmentSemStock,
+      activeJobs.length,
+      overdueCount,
+    ],
+  );
 
-    async function search(e: React.FormEvent) {
-      e.preventDefault();
-      setLoading(true);
-      setNotFound(false);
-      setJob(null);
-      try {
-        const data = await trackingAPI.getByCode(code);
-        if (!data) {
-          setNotFound(true);
-        } else {
-          setJob(data);
-        }
-      } catch (error) {
-        console.error("Erro ao consultar:", error);
-        setNotFound(true);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    if (job) {
-      return (
-        <div className="mt-3">
-          <OrderStatusView job={job} />
-        </div>
-      );
-    }
-
-    return (
-      <form className="mt-3 space-y-4" onSubmit={search}>
-        <div className="space-y-2">
-          <Label htmlFor="track-code">Código de Rastreio</Label>
-          <Input
-            id="track-code"
-            value={code}
-            onChange={(e) =>
-              setCode(e.target.value.toUpperCase())
-            }
-            placeholder="Ex: AB12CD34"
-            className="font-mono uppercase tracking-widest"
-            required
-          />
-        </div>
-        {notFound && (
-          <p className="text-sm text-red-600 dark:text-red-400">
-            Código não encontrado. Verifica se está correto.
-          </p>
-        )}
-        <div className="flex justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onClose}
-          >
-            Fechar
-          </Button>
-          <Button
-            type="submit"
-            className="bg-red-600 hover:bg-red-700"
-            disabled={loading}
-          >
-            {loading && (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            )}
-            Consultar
-          </Button>
-        </div>
-      </form>
-    );
-  }
+  const closeRegister = useCallback(
+    () => setRegisterOpen(false),
+    [],
+  );
+  const closeTrack = useCallback(() => setTrackOpen(false), []);
+  const handleRegistered = useCallback(() => {
+    setRegisterOpen(false);
+    loadJobs(true); // atualiza horas/progresso sem piscar
+  }, [loadJobs]);
 
   return (
     <div className="mx-auto max-w-7xl space-y-7">
@@ -394,19 +568,19 @@ export function DashboardPage() {
         })}
       </section>
 
-      {vehiclesEmAvaria > 0 && (
+      {fleetCounts.avaria > 0 && (
         <div className="flex items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/20 dark:text-rose-400">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           <span>
-            <strong>{vehiclesEmAvaria}</strong> viatura(s) em
+            <strong>{fleetCounts.avaria}</strong> viatura(s) em
             avaria neste momento.
           </span>
         </div>
       )}
 
-      {/* Progresso dos meus projetos — gráficos circulares */}
+      {/* Progresso dos meus projetos */}
       {myJobs.length > 0 && (
-        <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <section className={CARD}>
           <div className="border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
               PROGRESSO
@@ -415,108 +589,21 @@ export function DashboardPage() {
               Os Meus Projetos
             </h2>
           </div>
-          <div className="grid gap-4 p-5 sm:grid-cols-1 lg:grid-cols-2">
-            {myJobs.map((job: any) => {
-              const now = Date.now();
-              const created = new Date(
-                job.created_at,
-              ).getTime();
-              const due = new Date(job.due_date).getTime();
-              const totalSpan = due - created;
-              const elapsed = now - created;
-              const datePercent =
-                totalSpan > 0
-                  ? (elapsed / totalSpan) * 100
-                  : now > due
-                    ? 100
-                    : 0;
-
-              const hoursConsumed = calcJobHoursConsumed(
-                job,
-                assigneeRows,
-              );
-              const hoursPercent = job.max_hours
-                ? (hoursConsumed / Number(job.max_hours)) * 100
-                : null;
-
-              const checklistTotal = job.checklist?.length || 0;
-              const checklistDone =
-                job.checklist?.filter((c: any) => c.checked)
-                  .length || 0;
-              const checklistPercent =
-                checklistTotal > 0
-                  ? (checklistDone / checklistTotal) * 100
-                  : 0;
-
-              return (
-                <div
-                  key={job.id}
-                  className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"
-                >
-                  <p className="mb-3 truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
-                    {job.title}
-                  </p>
-                  <div className="flex items-center justify-around">
-                    <CircularProgress
-                      percent={datePercent}
-                      label="Prazo"
-                      sublabel={new Date(
-                        job.due_date,
-                      ).toLocaleDateString("pt-PT")}
-                      color={
-                        datePercent >= 100
-                          ? "#dc2626"
-                          : "#3f3f46"
-                      }
-                    />
-                    {hoursPercent !== null ? (
-                      <CircularProgress
-                        percent={hoursPercent}
-                        label="Horas"
-                        sublabel={`${hoursConsumed.toFixed(1)}/${job.max_hours}h`}
-                        color={
-                          hoursPercent >= 100
-                            ? "#dc2626"
-                            : "#3f3f46"
-                        }
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center gap-2 text-center">
-                        <div className="grid h-20 w-20 place-items-center rounded-full border-8 border-dashed border-zinc-100 dark:border-zinc-800">
-                          <span className="text-xs text-zinc-300">
-                            -
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-zinc-700 dark:text-zinc-300">
-                            Horas
-                          </p>
-                          <p className="text-[11px] text-zinc-400">
-                            sem limite
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                    <CircularProgress
-                      percent={checklistPercent}
-                      label="Checklist"
-                      sublabel={`${checklistDone}/${checklistTotal} fases`}
-                      color={
-                        checklistPercent >= 100
-                          ? "#16a34a"
-                          : "#3f3f46"
-                      }
-                    />
-                  </div>
-                </div>
-              );
-            })}
+          <div className="grid gap-4 p-5 lg:grid-cols-2">
+            {myJobs.map((job: any) => (
+              <JobProgressCard
+                key={job.id}
+                job={job}
+                assigneeRows={assigneeRows}
+                now={now}
+              />
+            ))}
           </div>
         </section>
       )}
 
       <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
-        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className={CARD}>
           <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
@@ -544,49 +631,18 @@ export function DashboardPage() {
             </div>
           ) : (
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-              {upcomingJobs.map((job: any) => {
-                const overdue =
-                  new Date(job.due_date).getTime() < Date.now();
-                return (
-                  <div
-                    key={job.id}
-                    className="flex items-center gap-3 px-5 py-3"
-                  >
-                    <div
-                      className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${
-                        overdue
-                          ? "bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400"
-                          : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"
-                      }`}
-                    >
-                      <Clock3 className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
-                        {job.title}
-                      </p>
-                      <p className="text-xs text-zinc-400">
-                        {job.assignees?.length
-                          ? job.assignees
-                              .map((a: any) => a.nome)
-                              .join(", ") + " · "
-                          : ""}
-                        Prazo: {formatDueDate(job.due_date)}
-                      </p>
-                    </div>
-                    {overdue && (
-                      <Badge className="border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400">
-                        Atrasado
-                      </Badge>
-                    )}
-                  </div>
-                );
-              })}
+              {upcomingJobs.map((job: any) => (
+                <UrgentJobRow
+                  key={job.id}
+                  job={job}
+                  now={now}
+                />
+              ))}
             </div>
           )}
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className={CARD}>
           <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
@@ -608,40 +664,14 @@ export function DashboardPage() {
           ) : (
             <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
               {recentMovements.map((m: any) => (
-                <div
-                  key={m.id}
-                  className="flex items-center gap-3 px-5 py-3"
-                >
-                  <div
-                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${
-                      m.tipo === "levantamento"
-                        ? "bg-rose-50 text-rose-600 dark:bg-rose-950/30 dark:text-rose-400"
-                        : "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
-                    }`}
-                  >
-                    {m.tipo === "levantamento" ? (
-                      <ArrowUpFromLine className="h-4 w-4" />
-                    ) : (
-                      <ArrowDownToLine className="h-4 w-4" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
-                      {m.item_nome || "Artigo removido"}
-                    </p>
-                    <p className="text-xs text-zinc-400">
-                      {m.user_nome || "-"} · {m.quantidade}{" "}
-                      unid.
-                    </p>
-                  </div>
-                </div>
+                <MovementRow key={m.id} m={m} />
               ))}
             </div>
           )}
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <section className={CARD}>
         <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
           <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
             Estado da Frota
@@ -652,26 +682,19 @@ export function DashboardPage() {
           </div>
         </div>
         <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
-          {["disponivel", "em_uso", "manutencao", "avaria"].map(
-            (status) => {
-              const count = vehicles.filter(
-                (v: any) => v.status === status,
-              ).length;
-              return (
-                <div
-                  key={status}
-                  className={`rounded-lg border px-4 py-3 ${STATUS_STYLES[status]}`}
-                >
-                  <p className="text-2xl font-semibold">
-                    {count}
-                  </p>
-                  <p className="text-xs font-medium">
-                    {STATUS_LABELS[status]}
-                  </p>
-                </div>
-              );
-            },
-          )}
+          {FLEET_STATUSES.map((status) => (
+            <div
+              key={status}
+              className={`rounded-lg border px-4 py-3 ${STATUS_STYLES[status]}`}
+            >
+              <p className="text-2xl font-semibold">
+                {fleetCounts[status]}
+              </p>
+              <p className="text-xs font-medium">
+                {STATUS_LABELS[status]}
+              </p>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -685,32 +708,110 @@ export function DashboardPage() {
           </DialogHeader>
           <QuickRegisterForm
             currentUser={currentUser}
-            onClose={() => setRegisterOpen(false)}
+            onClose={closeRegister}
+            onSaved={handleRegistered}
           />
         </DialogContent>
       </Dialog>
 
-      {/* Modal: tracking — FORA do formulário! */}
       <Dialog open={trackOpen} onOpenChange={setTrackOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Ver Estado da Encomenda</DialogTitle>
           </DialogHeader>
-          <TrackLookupForm
-            onClose={() => setTrackOpen(false)}
-          />
+          <TrackLookupForm onClose={closeTrack} />
         </DialogContent>
       </Dialog>
     </div>
   );
 }
 
+// ==================== CONSULTA DE ENCOMENDA ====================
+// Estava definido DENTRO do DashboardPage: a cada render era um componente
+// "novo" e o React desmontava/remontava o formulário (perdia o foco ao escrever).
+function TrackLookupForm({ onClose }: { onClose: () => void }) {
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [job, setJob] = useState<any | null>(null);
+  const [notFound, setNotFound] = useState(false);
+
+  async function search(e: React.FormEvent) {
+    e.preventDefault();
+    setLoading(true);
+    setNotFound(false);
+    setJob(null);
+    try {
+      const data = await trackingAPI.getByCode(code.trim());
+      if (data) setJob(data);
+      else setNotFound(true);
+    } catch (error) {
+      console.error("Erro ao consultar:", error);
+      setNotFound(true);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (job) {
+    return (
+      <div className="mt-3">
+        <OrderStatusView job={job} />
+      </div>
+    );
+  }
+
+  return (
+    <form className="mt-3 space-y-4" onSubmit={search}>
+      <div className="space-y-2">
+        <Label htmlFor="track-code">Código de Rastreio</Label>
+        <Input
+          id="track-code"
+          value={code}
+          onChange={(e) =>
+            setCode(e.target.value.toUpperCase())
+          }
+          placeholder="Ex: AB12CD34"
+          className="font-mono uppercase tracking-widest"
+          required
+        />
+      </div>
+      {notFound && (
+        <p className="text-sm text-red-600 dark:text-red-400">
+          Código não encontrado. Verifica se está correto.
+        </p>
+      )}
+      <div className="flex justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onClose}
+        >
+          Fechar
+        </Button>
+        <Button
+          type="submit"
+          className="bg-red-600 hover:bg-red-700"
+          disabled={loading}
+        >
+          {loading && (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          )}
+          Consultar
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// ==================== REGISTO RÁPIDO ====================
 function QuickRegisterForm({
   currentUser,
   onClose,
+  onSaved,
 }: {
   currentUser: any;
   onClose: () => void;
+  onSaved: () => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -737,11 +838,10 @@ function QuickRegisterForm({
         createdBy: currentUser?.id,
         assigneeIds: [currentUser?.id],
       });
-      onClose();
+      onSaved();
     } catch (error) {
       console.error("Erro ao registar atividade:", error);
       alert("Erro ao registar atividade.");
-    } finally {
       setLoading(false);
     }
   }
