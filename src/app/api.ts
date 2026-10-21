@@ -171,6 +171,12 @@ export const tokenStore = {
   clear: () => localStorage.removeItem(TOKEN_KEY),
 };
 
+let onUnauthorized: (() => void) | null = null;
+export const setUnauthorizedHandler = (fn: (() => void) | null) => {
+  onUnauthorized = fn;
+};
+
+
 // Authorization = anon key (exigida pelo gateway do Supabase)
 // X-App-Token   = token da sessão própria (é este que a edge function valida)
 async function callApi(

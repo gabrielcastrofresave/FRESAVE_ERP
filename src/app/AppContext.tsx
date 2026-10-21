@@ -26,7 +26,9 @@ import {
   setAuthToken,
   getAuthToken,
   equipmentSchedulesAPI,
+  setUnauthorizedHandler,
   stockAPI,
+  tokenStore,
 } from "./api";
 import { requestBrowserNotificationPermission } from "./utils/realtimeNotifications";
 import { subscribeRealtimeNotifications } from "./utils/realtimeNotifications";
@@ -161,6 +163,7 @@ export function AppProvider({
   >([]);
   const [inspections, setInspections] = useState<any[]>([]);
   const [insurances, setInsurances] = useState<any[]>([]);
+  
   const [equipmentSchedules, setEquipmentSchedules] = useState<
     any[]
   >([]);
@@ -377,9 +380,10 @@ export function AppProvider({
     const initializeAuth = async () => {
       setLoading(true);
       const token = getAuthToken();
+      const appToken = tokenStore.get(); // token real da edge function
       const savedUser = localStorage.getItem("currentUser");
 
-      if (token && savedUser) {
+      if (token && appToken && savedUser) {
         try {
           const user = JSON.parse(savedUser);
           setCurrentUser(user);
@@ -429,7 +433,7 @@ export function AppProvider({
 
   // ==================== REFRESH DATA ====================
   const refreshData = async () => {
-    const token = getAuthToken();
+    const token = tokenStore.get();
     if (!token) return;
 
     try {
@@ -442,7 +446,10 @@ export function AppProvider({
         schedulesRes,
       ] = await Promise.all([
         usersAPI.getAll().catch(() => ({ users: [] })),
-        vehiclesAPI.getAll().catch(() => ({ vehicles: [] })),
+        vehiclesAPI.getAll().catch((e) => {
+          console.error("Erro a carregar viaturas:", e);
+          return { vehicles: [] };
+        }),
         equipmentAPI.getAll().catch(() => ({ equipment: [] })),
         calendarAPI.getAll().catch(() => ({ events: [] })),
         equipmentSchedulesAPI.getAll().catch(() => []),
@@ -617,6 +624,7 @@ export function AppProvider({
 
   const logout = () => {
     setAuthToken(null);
+    tokenStore.clear();
     setCurrentUser(null);
     localStorage.removeItem("currentUser");
     localStorage.removeItem("token");
@@ -634,6 +642,11 @@ export function AppProvider({
     setNotifications([]);
     setPermissions({});
   };
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => logout());
+    return () => setUnauthorizedHandler(null);
+  }, []);
 
   // ==================== USERS ====================
   const addUser = async (
