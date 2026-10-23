@@ -691,68 +691,73 @@ export function MyActivityPage() {
             )}
           </div>
         ) : view === "semana" ? (
-          <div className="overflow-x-auto">
-            <div className="grid min-w-[840px] grid-cols-7 divide-x divide-zinc-100 dark:divide-zinc-800">
-              <div className="col-span-7 grid grid-cols-7 divide-x divide-zinc-100 bg-zinc-50 dark:divide-zinc-800 dark:bg-zinc-800/50">
-                {weekDays.map((day) => (
-                  <div
-                    key={day.toISOString()}
-                    className={`px-3 py-3 text-center ${
-                      isSameDay(day, new Date())
-                        ? "bg-red-50 dark:bg-red-950/20"
-                        : ""
-                    }`}
-                  >
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                      {DAY_NAMES[(day.getDay() + 6) % 7]}
-                    </p>
-                    <p
-                      className={`mt-1 text-lg font-semibold ${
-                        isSameDay(day, new Date())
-                          ? "text-red-600"
-                          : "text-zinc-700 dark:text-zinc-300"
-                      }`}
-                    >
-                      {day.getDate()}
-                    </p>
-                  </div>
-                ))}
-              </div>
-              {weekDays.map((day) => (
+          <div className="space-y-3 p-4">
+            {weekDays.map((day) => {
+              const hoje = isSameDay(day, new Date());
+              const registos = dayRows(day);
+              const total = dayTotal(day);
+              return (
                 <div
                   key={day.toISOString()}
-                  className="min-h-[20rem] space-y-2 bg-white p-2 dark:bg-zinc-900"
+                  className={`overflow-hidden rounded-lg border ${
+                    hoje
+                      ? "border-red-200 dark:border-red-900/50"
+                      : "border-zinc-200 dark:border-zinc-800"
+                  }`}
                 >
-                  {dayRows(day).map((row: any) => (
-                    <TaskPill
-                      key={row.id}
-                      compact
-                      row={row}
-                      onClick={() => setEditingRow(row)}
-                    />
-                  ))}
-                </div>
-              ))}
-              {/* Rodapé: total de horas líquidas trabalhadas por dia */}
-              <div className="col-span-7 grid grid-cols-7 divide-x divide-zinc-100 border-t border-zinc-200 bg-zinc-50 dark:divide-zinc-800 dark:border-zinc-700 dark:bg-zinc-800/50">
-                {weekDays.map((day) => {
-                  const total = dayTotal(day);
-                  return (
-                    <div
-                      key={`total-${day.toISOString()}`}
-                      className="px-3 py-3 text-center"
-                    >
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                        Total
-                      </p>
-                      <p className="mt-1 text-sm font-bold text-zinc-900 dark:text-zinc-50">
-                        {total > 0 ? formatHours(total) : "—"}
-                      </p>
+                  {/* Cabeçalho do dia */}
+                  <div
+                    className={`flex items-center justify-between px-4 py-2.5 ${
+                      hoje
+                        ? "bg-red-50 dark:bg-red-950/30"
+                        : "bg-zinc-50 dark:bg-zinc-800/60"
+                    }`}
+                  >
+                    <div className="flex items-baseline gap-2">
+                      <span
+                        className={`text-[11px] font-semibold uppercase tracking-wider ${
+                          hoje
+                            ? "text-red-600"
+                            : "text-zinc-400"
+                        }`}
+                      >
+                        {DAY_NAMES[(day.getDay() + 6) % 7]}
+                      </span>
+                      <span
+                        className={`text-base font-semibold ${
+                          hoje
+                            ? "text-red-600"
+                            : "text-zinc-800 dark:text-zinc-100"
+                        }`}
+                      >
+                        {day.getDate()}
+                      </span>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
+                    <span className="text-xs font-bold text-zinc-900 dark:text-zinc-50">
+                      {total > 0 ? formatHours(total) : "—"}
+                    </span>
+                  </div>
+
+                  {/* Registos do dia, uns debaixo dos outros */}
+                  <div className="space-y-2 bg-white p-2 dark:bg-zinc-900">
+                    {registos.length === 0 ? (
+                      <p className="px-2 py-1 text-xs text-zinc-400">
+                        Sem registos.
+                      </p>
+                    ) : (
+                      registos.map((row: any) => (
+                        <TaskPill
+                          key={row.id}
+                          wrap
+                          row={row}
+                          onClick={() => setEditingRow(row)}
+                        />
+                      ))
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         ) : (
           <MonthView
@@ -796,10 +801,12 @@ function TaskPill({
   row,
   onClick,
   compact = false,
+  wrap = false,
 }: {
   row: any;
   onClick: () => void;
   compact?: boolean;
+  wrap?: boolean;
 }) {
   const liquidos = netMinutes(
     row.hora_inicio,
@@ -813,7 +820,11 @@ function TaskPill({
         compact ? "p-2" : ""
       }`}
     >
-      <p className="min-w-0 truncate text-xs font-semibold text-zinc-900 dark:text-zinc-50">
+      <p
+        className={`min-w-0 text-xs font-semibold text-zinc-900 dark:text-zinc-50 ${
+          wrap ? "whitespace-normal break-words" : "truncate"
+        }`}
+      >
         {row.titulo || "(sem título)"}
       </p>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[10px]">

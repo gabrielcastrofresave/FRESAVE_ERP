@@ -163,7 +163,7 @@ export function AppProvider({
   >([]);
   const [inspections, setInspections] = useState<any[]>([]);
   const [insurances, setInsurances] = useState<any[]>([]);
-  
+
   const [equipmentSchedules, setEquipmentSchedules] = useState<
     any[]
   >([]);
@@ -229,11 +229,13 @@ export function AppProvider({
           .getMovements()
           .catch(() => ({ data: [] }));
 
-        const movements = (movsRes.data || []).map((m: any) => ({
-          ...m,
-          item_nome: m.stock_items?.nome || m.item_nome,
-          user_nome: m.users?.nome || m.user_nome,
-        }));
+        const movements = (movsRes.data || []).map(
+          (m: any) => ({
+            ...m,
+            item_nome: m.stock_items?.nome || m.item_nome,
+            user_nome: m.users?.nome || m.user_nome,
+          }),
+        );
         setStockMovements(movements);
       } catch (error) {
         console.error("Erro ao carregar stock:", error);
@@ -245,19 +247,25 @@ export function AppProvider({
     [],
   );
 
-  const loadMoreStockItems = useCallback(async (page: number) => {
-    try {
-      const res = await stockAPI.getItems({ page, limit: 1000 });
-      const newItems = (res.data || []).map((item: any) => ({
-        ...item,
-        quantidade: item.quantidade ?? 0,
-      }));
-      setStockItems((prev) => [...prev, ...newItems]);
-      setStockItemsPage(page);
-    } catch (error) {
-      console.error("Erro ao carregar mais itens:", error);
-    }
-  }, []);
+  const loadMoreStockItems = useCallback(
+    async (page: number) => {
+      try {
+        const res = await stockAPI.getItems({
+          page,
+          limit: 1000,
+        });
+        const newItems = (res.data || []).map((item: any) => ({
+          ...item,
+          quantidade: item.quantidade ?? 0,
+        }));
+        setStockItems((prev) => [...prev, ...newItems]);
+        setStockItemsPage(page);
+      } catch (error) {
+        console.error("Erro ao carregar mais itens:", error);
+      }
+    },
+    [],
+  );
 
   const addStockItem = async (item: any) => {
     try {

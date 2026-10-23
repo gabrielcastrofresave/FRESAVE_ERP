@@ -1,5 +1,5 @@
 // src/app/pages/OthersPage.tsx
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, useDeferredValue } from "react";
 import * as ScrollArea from "@radix-ui/react-scroll-area";
 import { useApp } from "../AppContext";
 import { Button } from "../components/ui/button";
@@ -71,6 +71,10 @@ const UNIDADES = [
 ];
 
 const PAGE_SIZE = 100;
+
+// Lista de movimentos virtualizada: só se desenham as linhas visíveis (altura fixa)
+const MOV_ROW_H = 40;
+const MOV_OVERSCAN = 12;
 
 // ==================== UTILITÁRIOS ====================
 function fmtDate(v: string | null | undefined) {
@@ -190,9 +194,12 @@ export function OthersPage() {
   const [jobs, setJobs] = useState<any[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  // paginação client-side
+  // paginação client-side (só o catálogo; os movimentos usam lista virtualizada)
   const [stockPage, setStockPage] = useState(1);
-  const [movPage, setMovPage] = useState(1);
+
+  // lista virtualizada dos movimentos
+  const movListRef = useRef<HTMLDivElement>(null);
+  const [movScroll, setMovScroll] = useState({ top: 0, height: 600 });
 
   // modais
   const [isItemModal, setIsItemModal] = useState(false);
@@ -206,6 +213,7 @@ export function OthersPage() {
 
   // filtros movimentos
   const [searchMov, setSearchMov] = useState("");
+  const deferredSearchMov = useDeferredValue(searchMov);
   const [tipoMov, setTipoMov] = useState<"todos" | "levantamento" | "devolucao">("todos");
   const [movSort, setMovSort] = useState<{ key: string; dir: SortDir }>({ key: "data", dir: "desc" });
 
@@ -234,7 +242,25 @@ export function OthersPage() {
 
   // Reset page ao mudar filtros
   useEffect(() => { setStockPage(1); }, [filters, stockSort]);
-  useEffect(() => { setMovPage(1); }, [searchMov, tipoMov, movSort]);
+
+  // Mede a altura visível da lista de movimentos
+  useEffect(() => {
+    if (tab !== "movimentos") return;
+    const el = movListRef.current;
+    if (!el) return;
+    const measure = () =>
+      setMovScroll((s) => (s.height === el.clientHeight ? s : { ...s, height: el.clientHeight }));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [tab]);
+
+  // Volta ao topo quando mudam os filtros / ordenação dos movimentos
+  useEffect(() => {
+    movListRef.current?.scrollTo({ top: 0 });
+    setMovScroll((s) => ({ ...s, top: 0 }));
+  }, [deferredSearchMov, tipoMov, movSort]);
 
   // ==================== PERMISSÕES ====================
   const isAdmin = ["administrador", "escritorio", "projeto"].includes(currentUser?.role ?? "");
@@ -273,7 +299,7 @@ export function OthersPage() {
 
   // ==================== FILTRAGEM MOVIMENTOS ====================
   const filteredMovements = useMemo(() => {
-    const q = searchMov.toLowerCase();
+    const q = deferredSearchMov.toLowerCase();
     let r = stockMovements.filter((m: any) => {
       if (tipoMov !== "todos" && m.tipo !== tipoMov) return false;
       if (q && !m.item_nome?.toLowerCase().includes(q) && !m.user_nome?.toLowerCase().includes(q)) return false;
@@ -287,12 +313,18 @@ export function OthersPage() {
       if (typeof av === "string") return dir === "asc" ? av.localeCompare(bv) : bv.localeCompare(av);
       return dir === "asc" ? av - bv : bv - av;
     });
-  }, [stockMovements, searchMov, tipoMov, movSort]);
+  }, [stockMovements, deferredSearchMov, tipoMov, movSort]);
 
-  const pagedMovements = useMemo(() => {
-    const start = (movPage - 1) * PAGE_SIZE;
-    return filteredMovements.slice(start, start + PAGE_SIZE);
-  }, [filteredMovements, movPage]);
+  // Só as linhas visíveis (+ margem) são desenhadas
+  const movStart = Math.max(0, Math.floor(movScroll.top / MOV_ROW_H) - MOV_OVERSCAN);
+  const movEnd = Math.min(
+    filteredMovements.length,
+    Math.ceil((movScroll.top + movScroll.height) / MOV_ROW_H) + MOV_OVERSCAN,
+  );
+  const visibleMovements = useMemo(
+    () => filteredMovements.slice(movStart, movEnd),
+    [filteredMovements, movStart, movEnd],
+  );
 
   // ==================== MÉTRICAS ====================
   const totalRef = stockItemsTotal || stockItems.length;
@@ -700,18 +732,28 @@ export function OthersPage() {
               {isAdmin && <div className="w-12 shrink-0 px-3 py-2" />}
             </div>
 
-            <ScrollArea.Root className="flex-1 overflow-hidden">
-              <ScrollArea.Viewport className="h-full w-full">
-                {pagedMovements.length === 0 ? (
-                  <div className="flex h-40 items-center justify-center text-sm text-zinc-400">
-                    Nenhum registo de movimento encontrado.
-                  </div>
-                ) : (
-                  pagedMovements.map((m: any, idx: number) => {
-                    const globalIdx = (movPage - 1) * PAGE_SIZE + idx + 1;
-                    return (
-                      <div key={m.id} className="flex items-center border-b border-zinc-100 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900">
-                        <div className="w-10 shrink-0 px-3 text-center text-[11px] text-zinc-300 dark:text-zinc-700">{globalIdx}</div>
+            <div
+              ref={movListRef}
+              className="min-h-0 flex-1 overflow-y-auto"
+              onScroll={(e) => {
+                const top = e.currentTarget.scrollTop;
+                setMovScroll((s) => (s.top === top ? s : { ...s, top }));
+              }}
+            >
+              {filteredMovements.length === 0 ? (
+                <div className="flex h-40 items-center justify-center text-sm text-zinc-400">
+                  Nenhum registo de movimento encontrado.
+                </div>
+              ) : (
+                <div style={{ height: filteredMovements.length * MOV_ROW_H, position: "relative" }}>
+                  <div style={{ position: "absolute", top: movStart * MOV_ROW_H, left: 0, right: 0 }}>
+                    {visibleMovements.map((m: any, idx: number) => (
+                      <div
+                        key={m.id}
+                        style={{ height: MOV_ROW_H }}
+                        className="flex items-center border-b border-zinc-100 text-sm hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
+                      >
+                        <div className="w-10 shrink-0 px-3 text-center text-[11px] text-zinc-300 dark:text-zinc-700">{movStart + idx + 1}</div>
                         <div className="w-24 shrink-0 px-3 text-xs text-zinc-500">{fmtDate(m.data)}</div>
                         <div className="w-32 shrink-0 px-3">
                           <span className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-bold uppercase ${
@@ -737,16 +779,19 @@ export function OthersPage() {
                           </div>
                         )}
                       </div>
-                    );
-                  })
-                )}
-              </ScrollArea.Viewport>
-              <ScrollArea.Scrollbar orientation="vertical" className="flex w-2 touch-none select-none border-l border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900">
-                <ScrollArea.Thumb className="relative flex-1 rounded-full bg-zinc-300 dark:bg-zinc-700" />
-              </ScrollArea.Scrollbar>
-            </ScrollArea.Root>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
 
-            <Pagination page={movPage} total={filteredMovements.length} pageSize={PAGE_SIZE} onChange={setMovPage} />
+            <div className="flex shrink-0 items-center justify-between border-t border-zinc-100 bg-white px-4 py-2 dark:border-zinc-800 dark:bg-zinc-950">
+              <p className="text-xs text-zinc-500">
+                {filteredMovements.length.toLocaleString("pt-PT")} movimentos
+                {filteredMovements.length !== stockMovements.length &&
+                  ` (de ${stockMovements.length.toLocaleString("pt-PT")})`}
+              </p>
+            </div>
           </>
         )}
       </div>

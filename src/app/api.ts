@@ -172,10 +172,11 @@ export const tokenStore = {
 };
 
 let onUnauthorized: (() => void) | null = null;
-export const setUnauthorizedHandler = (fn: (() => void) | null) => {
+export const setUnauthorizedHandler = (
+  fn: (() => void) | null,
+) => {
   onUnauthorized = fn;
 };
-
 
 // Authorization = anon key (exigida pelo gateway do Supabase)
 // X-App-Token   = token da sessão própria (é este que a edge function valida)
@@ -1810,6 +1811,9 @@ export const accountingAPI = {
 // Consulta pública por código de rastreio — não depende de sessão/login
 export const trackingAPI = {
   getByCode: async (code: string) => {
+    const digits = code.replace(/\D/g, "");
+    if (digits.length !== 8) return null;
+
     const { data, error } = await supabase
       .from("jobs")
       .select(
@@ -1818,7 +1822,8 @@ export const trackingAPI = {
         job_checklist_items ( item_key, label, checked, checked_at )
       `,
       )
-      .eq("tracking_code", code.trim().toUpperCase())
+      .eq("tracking_code", digits)
+      .is("deleted_at", null)
       .maybeSingle();
     if (error) throw error;
     if (!data) return null;
