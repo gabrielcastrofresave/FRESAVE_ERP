@@ -21,7 +21,6 @@ import {
   DialogFooter,
   DialogDescription,
 } from "../components/ui/dialog";
-import { JobPicker } from "../components/JobPicker";
 import {
   ChevronLeft,
   ChevronRight,
@@ -29,9 +28,12 @@ import {
   FileText,
   Loader2,
   Plus,
+  Search,
+  X,
 } from "lucide-react";
 
 type ViewMode = "dia" | "semana" | "mes";
+type ModoRegisto = "horario" | "horas";
 
 const DAY_NAMES = [
   "Seg",
@@ -48,6 +50,9 @@ const PAUSAS_LANCHE: [number, number][] = [
   [10 * 60 + 30, 10 * 60 + 40], // 10:30–10:40
   [16 * 60, 16 * 60 + 10], // 16:00–16:10
 ];
+
+// Hora de início usada quando o registo é feito por "horas trabalhadas"
+const HORA_INICIO_PADRAO = "08:00";
 
 // Opções de almoço (valor em minutos; "0" = não almoçou)
 const ALMOCO_OPCOES = [
@@ -134,6 +139,13 @@ function toMinutes(time?: string | null): number | null {
   return h * 60 + m;
 }
 
+// Minutos desde a meia-noite -> "HH:MM"
+function fromMinutes(total: number) {
+  const h = String(Math.floor(total / 60)).padStart(2, "0");
+  const m = String(total % 60).padStart(2, "0");
+  return `${h}:${m}`;
+}
+
 // Minutos brutos entre início e fim; null se inválido
 function minutesBetween(
   inicio?: string | null,
@@ -169,6 +181,25 @@ function netMinutes(
     0,
   );
   return Math.max(0, b - a - pausas - (almocoMin ?? 0));
+}
+
+// Dado um início e as horas líquidas pretendidas, calcula a hora de fim
+// (as pausas de lanche que caiam pelo meio são acrescentadas, para o líquido bater certo)
+function fimParaHorasLiquidas(
+  inicio: string,
+  minutosLiquidos: number,
+): string | null {
+  const a = toMinutes(inicio);
+  if (a === null || minutosLiquidos <= 0) return null;
+  let fim = a + minutosLiquidos;
+  while (fim < 24 * 60) {
+    const liquido = netMinutes(inicio, fromMinutes(fim), 0);
+    if (liquido !== null && liquido >= minutosLiquidos) {
+      return fromMinutes(fim);
+    }
+    fim += 1;
+  }
+  return null;
 }
 
 // Ex.: 510 min -> "8,5 h"
@@ -467,7 +498,8 @@ export function MyActivityPage() {
     loadRows();
   }, [loadRows]);
 
-  // Trabalhos: só quando um diálogo (criar/editar) abre pela primeira vez
+  // Trabalhos em curso: só quando um diálogo (criar/editar) abre pela primeira vez.
+  // Servem para mostrar o nome do trabalho já associado a um registo ao editar.
   useEffect(() => {
     if (!(createOpen || editingRow) || jobsPedidos.current)
       return;
@@ -966,6 +998,225 @@ function AlmocoSelect({
   );
 }
 
+// Seletor de trabalho com os mesmos filtros da página de Trabalhos:
+// tipo de referência (PROD, PROD_INT, ...), ano, n.º interno e pesquisa por título/rastreio
+const SELECT_CLASS =
+  "h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200";
+
+function JobSearchPicker({
+  value,
+  onChange,
+  knownJobs,
+}: {
+  value: string;
+  onChange: (jobId: string) => void;
+  knownJobs: any[];
+}) {
+  const [refTypes, setRefTypes] = useState<string[]>([]);
+  const [refYears, setRefYears] = useState<string[]>([]);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [referenceType, setReferenceType] = useState("");
+  const [referenceYear, setReferenceYear] = useState("");
+  const [referenceNumber, setReferenceNumber] = useState("");
+  const [results, setResults] = useState<any[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<any | null>(
+    null,
+  );
+  const pedido = useRef(0);
+
+  // Opções dos filtros (uma vez)
+  useEffect(() => {
+    Promise.all([
+      jobsAPI.getAllReferenceTypes(),
+      jobsAPI.getAllReferenceYears(),
+    ])
+      .then(([types, years]) => {
+        setRefTypes(types);
+        setRefYears(years);
+      })
+      .catch((error: unknown) =>
+        console.error("Erro ao carregar filtros:", error),
+      );
+  }, []);
+
+  // Debounce da pesquisa por texto
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // Pesquisa trabalhos em curso com os filtros atuais
+  useEffect(() => {
+    const id = ++pedido.current;
+    setSearching(true);
+    jobsAPI
+      .getPage(1, 20, {
+        status: "em_curso",
+        search: search || undefined,
+        referenceType: referenceType || undefined,
+        referenceYear: referenceYear || undefined,
+        referenceNumber: referenceNumber.trim() || undefined,
+      })
+      .then((data: any) => {
+        if (id === pedido.current) setResults(data.jobs ?? []);
+      })
+      .catch((error: unknown) =>
+        console.error("Erro ao pesquisar trabalhos:", error),
+      )
+      .finally(() => {
+        if (id === pedido.current) setSearching(false);
+      });
+  }, [search, referenceType, referenceYear, referenceNumber]);
+
+  // Trabalho escolhido: o que acabou de ser clicado, ou o que já vinha associado ao registo
+  const escolhido =
+    selectedJob?.id === value
+      ? selectedJob
+      : (knownJobs.find((j) => j.id === value) ??
+        results.find((j) => j.id === value) ??
+        null);
+
+  const temFiltros =
+    searchInput !== "" ||
+    referenceType !== "" ||
+    referenceYear !== "" ||
+    referenceNumber !== "";
+
+  function limparFiltros() {
+    setSearchInput("");
+    setSearch("");
+    setReferenceType("");
+    setReferenceYear("");
+    setReferenceNumber("");
+  }
+
+  return (
+    <div className="space-y-2">
+      {value && (
+        <div className="flex items-center justify-between gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 dark:border-red-900 dark:bg-red-950/30">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
+              {escolhido?.title ?? "Trabalho selecionado"}
+            </p>
+            {escolhido?.reference && (
+              <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                {escolhido.reference}
+              </p>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            onClick={() => {
+              setSelectedJob(null);
+              onChange("");
+            }}
+            aria-label="Remover trabalho"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+          <Input
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Pesquisar por título ou rastreio"
+            className="h-9 pl-9"
+          />
+        </div>
+        <select
+          value={referenceType}
+          onChange={(e) => setReferenceType(e.target.value)}
+          className={SELECT_CLASS}
+        >
+          <option value="">Tipo de Ref.</option>
+          {refTypes.map((t) => (
+            <option key={t} value={t}>
+              {t}
+            </option>
+          ))}
+        </select>
+        <select
+          value={referenceYear}
+          onChange={(e) => setReferenceYear(e.target.value)}
+          className={SELECT_CLASS}
+        >
+          <option value="">Ano</option>
+          {refYears.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </select>
+        <Input
+          value={referenceNumber}
+          onChange={(e) => setReferenceNumber(e.target.value)}
+          placeholder="N.º interno"
+          className="h-9 sm:w-32"
+        />
+      </div>
+
+      <div className="max-h-48 overflow-y-auto rounded-md border border-zinc-200 dark:border-zinc-700">
+        {searching && results.length === 0 ? (
+          <p className="flex items-center px-3 py-3 text-xs text-zinc-400">
+            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+            A pesquisar…
+          </p>
+        ) : results.length === 0 ? (
+          <div className="flex items-center justify-between px-3 py-3">
+            <p className="text-xs text-zinc-400">
+              Nenhum trabalho em curso corresponde à pesquisa.
+            </p>
+            {temFiltros && (
+              <button
+                type="button"
+                onClick={limparFiltros}
+                className="text-xs font-medium text-red-600"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+        ) : (
+          <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+            {results.map((job) => (
+              <li key={job.id}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedJob(job);
+                    onChange(job.id);
+                  }}
+                  className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/60 ${
+                    job.id === value
+                      ? "bg-red-50/60 dark:bg-red-950/20"
+                      : ""
+                  }`}
+                >
+                  <span className="min-w-0 truncate text-sm text-zinc-800 dark:text-zinc-100">
+                    {job.title}
+                  </span>
+                  <span className="shrink-0 font-mono text-[11px] text-zinc-400">
+                    {job.reference}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Formulário único: cria um registo novo ou edita um existente (se vier "row")
 function RegistoForm({
   row,
@@ -982,6 +1233,7 @@ function RegistoForm({
 }) {
   const isEdit = Boolean(row);
   const [loading, setLoading] = useState(false);
+  const [modo, setModo] = useState<ModoRegisto>("horario");
   const [titulo, setTitulo] = useState(
     row?.titulo && row.titulo !== "(sem título)"
       ? row.titulo
@@ -1004,12 +1256,26 @@ function RegistoForm({
       ? String(row.almoco_minutos)
       : "",
   );
+  // Modo "horas trabalhadas": número de horas líquidas (aceita vírgula ou ponto)
+  const [horasTrabalhadas, setHorasTrabalhadas] = useState("");
 
-  const horasCalculadas = netMinutes(
-    horaInicio,
-    horaFim,
-    almoco === "" ? null : Number(almoco),
-  );
+  const horasNumero = Number(horasTrabalhadas.replace(",", "."));
+  const horasValidas =
+    horasTrabalhadas.trim() !== "" &&
+    Number.isFinite(horasNumero) &&
+    horasNumero > 0 &&
+    horasNumero <= 16;
+
+  const horasCalculadas =
+    modo === "horas"
+      ? horasValidas
+        ? Math.round(horasNumero * 60)
+        : null
+      : netMinutes(
+          horaInicio,
+          horaFim,
+          almoco === "" ? null : Number(almoco),
+        );
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -1017,16 +1283,41 @@ function RegistoForm({
       alert("Indica o título do registo.");
       return;
     }
-    if (minutesBetween(horaInicio, horaFim) === null) {
-      alert(
-        "A hora de fim tem de ser posterior à hora de início.",
+
+    let inicioFinal = horaInicio;
+    let fimFinal = horaFim;
+    let almocoFinal = almoco === "" ? 0 : Number(almoco);
+
+    if (modo === "horas") {
+      if (!horasValidas) {
+        alert("Indica as horas trabalhadas (entre 0 e 16).");
+        return;
+      }
+      // As horas já são líquidas: guarda-se um horário equivalente a partir das 08:00
+      const fim = fimParaHorasLiquidas(
+        HORA_INICIO_PADRAO,
+        Math.round(horasNumero * 60),
       );
-      return;
+      if (!fim) {
+        alert("Não foi possível calcular o horário para essas horas.");
+        return;
+      }
+      inicioFinal = HORA_INICIO_PADRAO;
+      fimFinal = fim;
+      almocoFinal = 0;
+    } else {
+      if (minutesBetween(horaInicio, horaFim) === null) {
+        alert(
+          "A hora de fim tem de ser posterior à hora de início.",
+        );
+        return;
+      }
+      if (almoco === "") {
+        alert("Escolhe a opção de almoço.");
+        return;
+      }
     }
-    if (almoco === "") {
-      alert("Escolhe a opção de almoço.");
-      return;
-    }
+
     if (!isEdit && !currentUser?.id) {
       alert("Sessão inválida. Volta a iniciar sessão.");
       return;
@@ -1041,18 +1332,18 @@ function RegistoForm({
           data,
         });
         await productionTasksAPI.updateAssignee(row.id, {
-          horaInicio,
-          horaFim,
-          almocoMinutos: Number(almoco),
+          horaInicio: inicioFinal,
+          horaFim: fimFinal,
+          almocoMinutos: almocoFinal,
         });
       } else {
         await productionTasksAPI.create({
           jobId: jobId || null,
           titulo: titulo.trim(),
           data,
-          horaInicio,
-          horaFim,
-          almocoMinutos: Number(almoco),
+          horaInicio: inicioFinal,
+          horaFim: fimFinal,
+          almocoMinutos: almocoFinal,
           createdBy: currentUser?.id,
           assigneeIds: [currentUser?.id],
         });
@@ -1087,10 +1378,10 @@ function RegistoForm({
 
       <div className="space-y-2 md:col-span-2">
         <Label>Trabalho (opcional)</Label>
-        <JobPicker
-          jobs={jobs}
+        <JobSearchPicker
           value={jobId}
           onChange={setJobId}
+          knownJobs={jobs}
         />
       </div>
 
@@ -1105,33 +1396,78 @@ function RegistoForm({
         />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="horaInicio">Hora Início *</Label>
-        <Input
-          id="horaInicio"
-          type="time"
-          value={horaInicio}
-          onChange={(e) => setHoraInicio(e.target.value)}
-          required
-        />
+      {/* Toggle: como queres registar o tempo */}
+      <div className="space-y-2 md:col-span-3">
+        <Label>Registar por</Label>
+        <div className="inline-flex rounded-lg bg-zinc-100 p-1 dark:bg-zinc-800">
+          {(
+            [
+              ["horario", "Início e fim"],
+              ["horas", "Horas trabalhadas"],
+            ] as [ModoRegisto, string][]
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setModo(m)}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                modo === m
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-50"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="horaFim">Hora Fim *</Label>
-        <Input
-          id="horaFim"
-          type="time"
-          value={horaFim}
-          onChange={(e) => setHoraFim(e.target.value)}
-          required
-        />
-      </div>
+      {modo === "horario" ? (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="horaInicio">Hora Início *</Label>
+            <Input
+              id="horaInicio"
+              type="time"
+              value={horaInicio}
+              onChange={(e) => setHoraInicio(e.target.value)}
+              required
+            />
+          </div>
 
-      <AlmocoSelect
-        id="almoco"
-        value={almoco}
-        onChange={setAlmoco}
-      />
+          <div className="space-y-2">
+            <Label htmlFor="horaFim">Hora Fim *</Label>
+            <Input
+              id="horaFim"
+              type="time"
+              value={horaFim}
+              onChange={(e) => setHoraFim(e.target.value)}
+              required
+            />
+          </div>
+
+          <AlmocoSelect
+            id="almoco"
+            value={almoco}
+            onChange={setAlmoco}
+          />
+        </>
+      ) : (
+        <div className="space-y-2">
+          <Label htmlFor="horasTrabalhadas">
+            Horas trabalhadas *
+          </Label>
+          <Input
+            id="horasTrabalhadas"
+            type="text"
+            inputMode="decimal"
+            value={horasTrabalhadas}
+            onChange={(e) => setHorasTrabalhadas(e.target.value)}
+            placeholder="Ex.: 7,5"
+            required
+          />
+        </div>
+      )}
 
       <div className="space-y-2 md:col-span-3">
         <Label>Total de horas</Label>
@@ -1141,8 +1477,9 @@ function RegistoForm({
             : "—"}
         </div>
         <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-          Pausas de lanche (10:30–10:40 e 16:00–16:10)
-          descontadas automaticamente.
+          {modo === "horario"
+            ? "Pausas de lanche (10:30–10:40 e 16:00–16:10) descontadas automaticamente."
+            : "Indica as horas líquidas (já sem almoço nem pausas). O registo fica guardado com início às 08:00."}
         </p>
       </div>
 
