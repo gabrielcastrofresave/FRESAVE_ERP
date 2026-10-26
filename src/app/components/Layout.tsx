@@ -28,6 +28,7 @@ import {
   Link,
   ClipboardList,
   Calculator,
+  CalendarClock,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 
@@ -139,6 +140,20 @@ export function Layout({
           id: "jobs",
           label: "Trabalhos e Relatórios",
           icon: Hammer,
+        },
+      ],
+    },
+        {
+      id: "planeamentos",
+      label: "Planeamentos",
+      icon: CalendarClock,
+      section: "Operações",
+      roles: ["administrador", "escritorio", "projeto", "chefe_producao"],
+      items: [
+        {
+          id: "schedules",
+          label: "Planeamentos de Trabalho",
+          icon: CalendarClock,
         },
       ],
     },

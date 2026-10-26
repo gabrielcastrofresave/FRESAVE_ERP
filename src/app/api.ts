@@ -1494,7 +1494,7 @@ export const productionTasksAPI = {
     wintouch_custo, wintouch_nome,
     users ( nome ),
     production_tasks!inner (
-      tipo, job_id, titulo, cliente_obra, local, data, created_by, origem_wintouch,
+      tipo, job_id, titulo, descricao, cliente_obra, local, data, created_by, origem_wintouch,
       jobs ( title, reference )
     )
   `,
@@ -1541,6 +1541,7 @@ export const productionTasksAPI = {
       trabalho: row.production_tasks?.jobs?.title || null,
       codigo_trabalho:
         row.production_tasks?.jobs?.reference || null,
+      descricao: row.production_tasks?.descricao ?? "",
       cliente_obra: row.production_tasks?.cliente_obra,
       local: row.production_tasks?.local,
       data: row.production_tasks?.data,
@@ -1552,6 +1553,7 @@ export const productionTasksAPI = {
   create: async (task: {
     jobId?: string | null;
     titulo: string;
+    descricao?: string;
     clienteObra?: string;
     local?: string;
     data: string;
@@ -1568,6 +1570,7 @@ export const productionTasksAPI = {
           tipo: task.jobId ? "producao" : "manutencao",
           job_id: task.jobId || null,
           titulo: task.titulo || null,
+          descricao: task.descricao?.trim() || null,
           cliente_obra: task.clienteObra || null,
           local: task.local || null,
           data: task.data,
@@ -1605,6 +1608,7 @@ export const productionTasksAPI = {
     taskId: string,
     data: {
       titulo?: string;
+      descricao?: string;
       jobId?: string | null;
       data?: string;
     },
@@ -1612,6 +1616,8 @@ export const productionTasksAPI = {
     const payload: any = {};
     if (data.titulo !== undefined)
       payload.titulo = data.titulo || null;
+    if (data.descricao !== undefined)
+      payload.descricao = data.descricao.trim() || null;
     if (data.jobId !== undefined)
       payload.job_id = data.jobId || null;
     if (data.data !== undefined) payload.data = data.data;
@@ -1855,5 +1861,139 @@ export const wintouchAPI = {
       },
     );
     return response.json();
+  },
+};
+
+// ==================== PLANEAMENTOS (TEMAS POR TRABALHO) ====================
+// Um tema pertence a UM trabalho; um trabalho pode ter VÁRIOS temas.
+
+export type ScheduleStatusFilter = "em_curso" | "concluido" | "todos";
+
+export type ScheduleFilters = {
+  status?: ScheduleStatusFilter; // estado do TRABALHO
+  search?: string;
+  referenceType?: string;
+  referenceYear?: string;
+  referenceNumber?: string;
+};
+
+// Coluna do CLIENTE na tabela jobs (ex.: "client_name", "cliente"). Deixa null se não existir.
+export const JOB_CLIENT_COLUMN: string | null = null;
+
+const SCHEDULE_SELECT = `
+  id, job_id, titulo, created_at,
+  job:jobs!inner ( id, title, description, reference, tracking_code, department, status${
+    JOB_CLIENT_COLUMN ? `, ${JOB_CLIENT_COLUMN}` : ""
+  } )
+`;
+
+const scheduleError = (error: any) =>
+  error?.code === "23505"
+    ? new Error("Já existe um tema com esse nome neste trabalho.")
+    : error;
+
+export const schedulesAPI = {
+  async getPage(
+    page: number,
+    size: number,
+    f: ScheduleFilters = {},
+  ) {
+    let q = supabase
+      .from("schedules")
+      .select(SCHEDULE_SELECT, { count: "exact" })
+      .is("deleted_at", null)
+      .is("job.deleted_at", null);
+
+    if (f.status && f.status !== "todos")
+      q = q.eq("job.status", f.status);
+    if (f.referenceType)
+      q = q.eq("job.wintouch_tipo", f.referenceType);
+    if (f.referenceYear)
+      q = q.eq("job.wintouch_serie", f.referenceYear);
+    if (f.referenceNumber)
+      q = q.eq("job.wintouch_numdoc", f.referenceNumber.trim());
+
+    // Pesquisa livre: referência (PROD_2026_123 ou PROD-2026-123), cliente,
+    // nome/descrição do trabalho, rastreio, ou nome do tema
+    const termo = (f.search ?? "")
+      .replace(/[,()%*\\]/g, " ")
+      .trim();
+    if (termo) {
+      const like = `%${termo}%`;
+      const likeRef = `%${termo.replace(/[_\s/]+/g, "-")}%`;
+      const jobConds = [
+        `title.ilike.${like}`,
+        `description.ilike.${like}`,
+        `reference.ilike.${like}`,
+        `reference.ilike.${likeRef}`,
+        `tracking_code.ilike.${like}`,
+      ];
+      if (JOB_CLIENT_COLUMN)
+        jobConds.push(`${JOB_CLIENT_COLUMN}.ilike.${like}`);
+
+      let jq = supabase
+        .from("jobs")
+        .select("id")
+        .is("deleted_at", null)
+        .or(jobConds.join(","));
+      if (f.status && f.status !== "todos")
+        jq = jq.eq("status", f.status);
+      const { data: jobsFound, error: jobsError } =
+        await jq.limit(1000);
+      if (jobsError) throw jobsError;
+
+      const ids = (jobsFound ?? []).map((j: any) => j.id);
+      const jobPart = ids.length
+        ? `job_id.in.(${ids.join(",")}),`
+        : "";
+      q = q.or(`${jobPart}titulo.ilike.${like}`);
+    }
+
+    const from = (page - 1) * size;
+    const { data, count, error } = await q
+      .order("job_id")
+      .order("titulo")
+      .range(from, from + size - 1);
+    if (error) throw error;
+    return { schedules: data ?? [], total: count ?? 0 };
+  },
+
+  // Vários temas de uma vez para o mesmo trabalho
+  async create(p: { jobId: string; temas: string[] }) {
+    const { error } = await supabase
+      .from("schedules")
+      .insert(p.temas.map((titulo) => ({ job_id: p.jobId, titulo })));
+    if (error) throw scheduleError(error);
+  },
+
+  async update(id: string, p: { jobId: string; titulo: string }) {
+    const { error } = await supabase
+      .from("schedules")
+      .update({ job_id: p.jobId, titulo: p.titulo })
+      .eq("id", id);
+    if (error) throw scheduleError(error);
+  },
+
+  // Soft delete
+  async delete(id: string) {
+    const { error } = await supabase
+      .from("schedules")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) throw error;
+  },
+
+  // Para a MyActivityPage: todos os temas de trabalhos em curso
+  async getForPicker() {
+    const { data, error } = await supabase
+      .from("schedules")
+      .select(SCHEDULE_SELECT)
+      .is("deleted_at", null)
+      .is("job.deleted_at", null)
+      .eq("job.status", "em_curso")
+      .order("titulo")
+      .limit(1000);
+    if (error) throw error;
+    return data ?? [];
   },
 };

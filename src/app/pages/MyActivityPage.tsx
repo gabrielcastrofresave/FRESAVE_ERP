@@ -10,6 +10,7 @@ import {
 import { useApp } from "../AppContext";
 import { productionTasksAPI, jobsAPI } from "../api";
 import { Button } from "../components/ui/button";
+import { ScheduleJobPicker } from "../components/ScheduleJobPicker";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import {
@@ -312,6 +313,7 @@ function buildExport(
       chave: chaveDia(r),
       data: formatDataCurta(chaveDia(r)),
       titulo: r.titulo || "(sem título)",
+      descricao: r.descricao || "",
       inicio: r.hora_inicio?.slice(0, 5) ?? "",
       fim: r.hora_fim?.slice(0, 5) ?? "",
       almoco: almocoTexto(r.almoco_minutos),
@@ -339,14 +341,16 @@ function exportarExcel(
   const linhas: (string | number)[][] = d.linhas.map((l) => [
     l.data,
     l.titulo,
+    l.descricao,
     l.inicio,
     l.fim,
     l.almoco,
     formatHorasNumero(l.mins),
   ]);
-  linhas.push(["", "", "", "", "", ""]);
+  linhas.push(["", "", "", "", "", "", ""]);
   linhas.push([
     "TOTAL",
+    "",
     "",
     "",
     "",
@@ -355,7 +359,7 @@ function exportarExcel(
   ]);
   downloadCsv(
     `atividade_${d.from}_${d.to}.csv`,
-    ["Data", "Título", "Início", "Fim", "Almoço", "Horas"],
+    ["Data", "Título", "Descrição", "Início", "Fim", "Almoço", "Horas"],
     linhas,
   );
 }
@@ -381,7 +385,11 @@ function exportarWord(
       (l) => `
         <tr>
           <td style="${td}">${escapeHtml(l.data)}</td>
-          <td style="${td}">${escapeHtml(l.titulo)}</td>
+          <td style="${td}">${escapeHtml(l.titulo)}${
+            l.descricao
+              ? `<br/><span style="color:#71717a; font-size:12px;">${escapeHtml(l.descricao)}</span>`
+              : ""
+          }</td>
           <td style="${td}">${escapeHtml(l.inicio)}–${escapeHtml(l.fim)}</td>
           <td style="${td}">${escapeHtml(l.almoco)}</td>
           <td style="${tdR} font-weight:bold;">${formatHorasNumero(l.mins)} h</td>
@@ -859,6 +867,15 @@ function TaskPill({
       >
         {row.titulo || "(sem título)"}
       </p>
+      {row.descricao && (
+        <p
+          className={`mt-1 min-w-0 text-[11px] text-zinc-500 dark:text-zinc-400 ${
+            wrap ? "whitespace-pre-line break-words" : "line-clamp-2"
+          }`}
+        >
+          {row.descricao}
+        </p>
+      )}
       <div className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[10px]">
         <span className="text-zinc-500 dark:text-zinc-400">
           {row.hora_inicio && row.hora_fim
@@ -1006,10 +1023,12 @@ const SELECT_CLASS =
 function JobSearchPicker({
   value,
   onChange,
+  onPickJob,
   knownJobs,
 }: {
   value: string;
   onChange: (jobId: string) => void;
+  onPickJob?: (job: any) => void;
   knownJobs: any[];
 }) {
   const [refTypes, setRefTypes] = useState<string[]>([]);
@@ -1194,6 +1213,7 @@ function JobSearchPicker({
                   onClick={() => {
                     setSelectedJob(job);
                     onChange(job.id);
+                    onPickJob?.(job);
                   }}
                   className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/60 ${
                     job.id === value
@@ -1239,6 +1259,7 @@ function RegistoForm({
       ? row.titulo
       : "",
   );
+  const [descricao, setDescricao] = useState(row?.descricao ?? "");
   const [jobId, setJobId] = useState(row?.job_id ?? "");
   const [data, setData] = useState(
     row?.data
@@ -1280,7 +1301,11 @@ function RegistoForm({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!titulo.trim()) {
-      alert("Indica o título do registo.");
+      alert("Escolhe o tema do registo.");
+      return;
+    }
+    if (!descricao.trim()) {
+      alert("Descreve o que fizeste.");
       return;
     }
 
@@ -1328,6 +1353,7 @@ function RegistoForm({
       if (isEdit) {
         await productionTasksAPI.updateTask(row.task_id, {
           titulo: titulo.trim(),
+          descricao,
           jobId: jobId || null,
           data,
         });
@@ -1340,6 +1366,7 @@ function RegistoForm({
         await productionTasksAPI.create({
           jobId: jobId || null,
           titulo: titulo.trim(),
+          descricao,
           data,
           horaInicio: inicioFinal,
           horaFim: fimFinal,
@@ -1365,23 +1392,45 @@ function RegistoForm({
       className="mt-3 grid gap-5 md:grid-cols-3"
       onSubmit={submit}
     >
+      {/* 1. Tema / trabalho: escolher um tema liga o trabalho e preenche o título */}
       <div className="space-y-2 md:col-span-3">
+        <Label>Tema / Trabalho (opcional)</Label>
+        <ScheduleJobPicker
+          value={jobId}
+          titulo={titulo}
+          onPick={({ jobId, titulo }) => {
+            setJobId(jobId);
+            setTitulo(titulo);
+          }}
+          onClear={() => {
+            setJobId("");
+            setTitulo("");
+          }}
+          fallback={
+            <JobSearchPicker
+              value={jobId}
+              onChange={(id) => {
+                setJobId(id);
+                if (!id) setTitulo("");
+              }}
+              onPickJob={(job) => setTitulo(job.title ?? "")}
+              knownJobs={jobs}
+            />
+          }
+        />
+      </div>
+
+      <div className="space-y-2 md:col-span-2">
         <Label htmlFor="titulo">Título *</Label>
         <Input
           id="titulo"
           value={titulo}
           onChange={(e) => setTitulo(e.target.value)}
-          placeholder="Ex.: Montagem de estrutura"
+          placeholder="Preenchido ao escolher o tema"
+          readOnly
+          tabIndex={-1}
+          className="cursor-default bg-zinc-50 dark:bg-zinc-800"
           required
-        />
-      </div>
-
-      <div className="space-y-2 md:col-span-2">
-        <Label>Trabalho (opcional)</Label>
-        <JobSearchPicker
-          value={jobId}
-          onChange={setJobId}
-          knownJobs={jobs}
         />
       </div>
 
@@ -1393,6 +1442,19 @@ function RegistoForm({
           value={data}
           onChange={(e) => setData(e.target.value)}
           required
+        />
+      </div>
+
+      <div className="space-y-2 md:col-span-3">
+        <Label htmlFor="descricao">O que fizeste *</Label>
+        <textarea
+          id="descricao"
+          value={descricao}
+          onChange={(e) => setDescricao(e.target.value)}
+          rows={3}
+          required
+          placeholder="Descreve o trabalho que fizeste neste registo"
+          className="w-full resize-y rounded-md border border-zinc-200 bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-600/30 dark:border-zinc-700"
         />
       </div>
 

@@ -12,6 +12,7 @@ import { productionTasksAPI, jobsAPI } from "../api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { JobPicker } from "../components/JobPicker";
+import { ScheduleJobPicker } from "../components/ScheduleJobPicker";
 import { Label } from "../components/ui/label";
 import {
   Dialog,
@@ -138,6 +139,7 @@ export function ProductionCalendarPage() {
   const [selectedUserId, setSelectedUserId] = useState("todos");
   const [createOpen, setCreateOpen] = useState(false);
   const [detalhe, setDetalhe] = useState<any | null>(null);
+  const [editingRow, setEditingRow] = useState<any | null>(null);
 
   const isAdmin =
     currentUser?.role === "administrador" ||
@@ -170,7 +172,12 @@ export function ProductionCalendarPage() {
 
   // Trabalhos: só quando o diálogo de criação abre pela primeira vez
   useEffect(() => {
-    if (!isAdmin || !createOpen || jobs.length > 0) return;
+    if (
+      !isAdmin ||
+      !(createOpen || editingRow) ||
+      jobs.length > 0
+    )
+      return;
     jobsAPI
       .getAll()
       .then((data: any[]) =>
@@ -181,7 +188,7 @@ export function ProductionCalendarPage() {
       .catch((error: unknown) =>
         console.error("Erro ao carregar trabalhos:", error),
       );
-  }, [isAdmin, createOpen, jobs.length]);
+  }, [isAdmin, createOpen, editingRow, jobs.length]);
 
   const filteredRows = useMemo(
     () =>
@@ -283,8 +290,9 @@ export function ProductionCalendarPage() {
             Calendário de Produção
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-            Atribui trabalhos obrigatórios à equipa. Cada pessoa
-            regista as suas próprias horas no dia atribuído.
+            Vê, cria e corrige os registos de toda a equipa. As
+            alterações feitas aqui prevalecem sobre o que cada pessoa
+            registou na Minha Atividade.
           </p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -298,8 +306,8 @@ export function ProductionCalendarPage() {
             <DialogHeader>
               <DialogTitle>Novo Registo</DialogTitle>
               <DialogDescription>
-                Atribui um trabalho a um ou mais utilizadores
-                para um dia específico.
+                Escolhe o tema e atribui o registo a um ou mais
+                utilizadores para um dia específico.
               </DialogDescription>
             </DialogHeader>
             <TaskForm
@@ -311,6 +319,32 @@ export function ProductionCalendarPage() {
           </DialogContent>
         </Dialog>
       </header>
+
+      {/* Modal: editar registo */}
+      <Dialog
+        open={Boolean(editingRow)}
+        onOpenChange={(open) => !open && setEditingRow(null)}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Editar Registo</DialogTitle>
+            <DialogDescription>
+              {editingRow &&
+                `${nomeDoRegisto(editingRow)} · ${formatDataLonga(editingRow.data)}`}
+            </DialogDescription>
+          </DialogHeader>
+          {editingRow && (
+            <TaskForm
+              key={editingRow.id}
+              row={editingRow}
+              jobs={jobs}
+              currentUser={currentUser}
+              onClose={() => setEditingRow(null)}
+              onSaved={loadRows}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       <div className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300">
@@ -401,6 +435,7 @@ export function ProductionCalendarPage() {
                   key={row.id}
                   row={row}
                   onOpen={() => setDetalhe(row)}
+                  onEdit={() => setEditingRow(row)}
                   onDelete={() => handleDeleteTask(row)}
                 />
               ))
@@ -445,6 +480,7 @@ export function ProductionCalendarPage() {
                       compact
                       row={row}
                       onOpen={() => setDetalhe(row)}
+                      onEdit={() => setEditingRow(row)}
                       onDelete={() => handleDeleteTask(row)}
                     />
                   ))}
@@ -524,6 +560,16 @@ export function ProductionCalendarPage() {
                   label="Local"
                   value={detalhe.local || "—"}
                 />
+                {detalhe.descricao && (
+                  <div className="col-span-2 min-w-0">
+                    <dt className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                      O que foi feito
+                    </dt>
+                    <dd className="mt-0.5 whitespace-pre-line break-words text-zinc-800 dark:text-zinc-100">
+                      {detalhe.descricao}
+                    </dd>
+                  </div>
+                )}
                 {detalhe.origem_wintouch && (
                   <>
                     <DetalheItem
@@ -539,6 +585,17 @@ export function ProductionCalendarPage() {
               </dl>
 
               <DialogFooter className="mt-4">
+                {!detalhe.origem_wintouch && (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEditingRow(detalhe);
+                      setDetalhe(null);
+                    }}
+                  >
+                    Editar
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   className="text-red-600"
@@ -583,11 +640,13 @@ function DetalheItem({
 function TaskPill({
   row,
   onOpen,
+  onEdit,
   onDelete,
   compact = false,
 }: {
   row: any;
   onOpen: () => void;
+  onEdit: () => void;
   onDelete: () => void;
   compact?: boolean;
 }) {
@@ -604,19 +663,37 @@ function TaskPill({
         <p className="min-w-0 truncate text-xs font-semibold text-zinc-900 dark:text-zinc-50">
           {row.titulo || "(sem título)"}
         </p>
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          className="text-[10px] text-red-600 hover:underline dark:text-red-400"
-        >
-          apagar
-        </button>
+        <div className="flex shrink-0 gap-2">
+          {!importada && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+              className="text-[10px] text-zinc-600 hover:underline dark:text-zinc-300"
+            >
+              editar
+            </button>
+          )}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="text-[10px] text-red-600 hover:underline dark:text-red-400"
+          >
+            apagar
+          </button>
+        </div>
       </div>
       <p className="mt-1 truncate text-[11px] font-medium text-zinc-700 dark:text-zinc-300">
         {nomeDoRegisto(row)}
       </p>
+      {row.descricao && (
+        <p className="mt-1 line-clamp-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+          {row.descricao}
+        </p>
+      )}
       <div className="mt-2 flex items-center justify-between gap-2 text-[10px]">
         <span className="text-zinc-500 dark:text-zinc-400">
           {importada
@@ -715,53 +792,71 @@ function MonthView({
   );
 }
 
+const ALMOCO_OPCOES = [
+  { value: "", label: "—" },
+  { value: "0", label: "Não almoçou" },
+  { value: "30", label: "30 minutos" },
+  { value: "60", label: "1 hora" },
+  { value: "90", label: "1 hora e meia" },
+];
+
+// Cria registos (para vários utilizadores) ou edita um registo existente (se vier "row")
 function TaskForm({
+  row,
   jobs,
   currentUser,
   onClose,
   onSaved,
 }: {
+  row?: any;
   jobs: any[];
   currentUser: any;
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
   const { users } = useApp();
+  const isEdit = Boolean(row);
   const [loading, setLoading] = useState(false);
-  const [jobId, setJobId] = useState("");
-  const [titulo, setTitulo] = useState("");
-  const [data, setData] = useState(toDateInput(new Date()));
+  const [jobId, setJobId] = useState(row?.job_id ?? "");
+  const [titulo, setTitulo] = useState(
+    row?.titulo && row.titulo !== "(sem título)" ? row.titulo : "",
+  );
+  const [descricao, setDescricao] = useState(row?.descricao ?? "");
+  const [data, setData] = useState(
+    row?.data ? String(row.data).slice(0, 10) : toDateInput(new Date()),
+  );
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
-  const [horaInicio, setHoraInicio] = useState("");
-  const [horaFim, setHoraFim] = useState("");
-  const [almoco, setAlmoco] = useState("");
+  const [horaInicio, setHoraInicio] = useState(
+    row?.hora_inicio?.slice(0, 5) ?? "",
+  );
+  const [horaFim, setHoraFim] = useState(row?.hora_fim?.slice(0, 5) ?? "");
+  const [almoco, setAlmoco] = useState(
+    row?.almoco_minutos != null ? String(row.almoco_minutos) : "",
+  );
 
   function toggleUser(id: string) {
     setAssigneeIds((cur) =>
-      cur.includes(id)
-        ? cur.filter((x) => x !== id)
-        : [...cur, id],
+      cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id],
     );
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
 
-    const jobSel = jobs.find((j: any) => j.id === jobId);
-    const tituloFinal = titulo.trim() || jobSel?.title || "";
-
-    if (!tituloFinal) {
-      alert("Indica um título ou seleciona um trabalho.");
+    if (!titulo.trim()) {
+      alert("Escolhe o tema do registo.");
       return;
     }
-    if (assigneeIds.length === 0) {
+    if (!descricao.trim()) {
+      alert("Descreve o que foi feito.");
+      return;
+    }
+    if (!isEdit && assigneeIds.length === 0) {
       alert("Seleciona pelo menos um utilizador.");
       return;
     }
     if ((horaInicio && !horaFim) || (!horaInicio && horaFim)) {
-      alert(
-        "Preenche a hora de início e a de fim (ou nenhuma).",
-      );
+      alert("Preenche a hora de início e a de fim (ou nenhuma).");
       return;
     }
     if (horaInicio && horaFim && horaFim <= horaInicio) {
@@ -771,46 +866,78 @@ function TaskForm({
 
     setLoading(true);
     try {
-      await productionTasksAPI.create({
-        jobId: jobId || null,
-        titulo: tituloFinal,
-        data,
-        createdBy: currentUser?.id,
-        assigneeIds,
-        horaInicio: horaInicio || undefined,
-        horaFim: horaFim || undefined,
-        almocoMinutos: almoco ? Number(almoco) : undefined,
-      });
+      if (isEdit) {
+        await productionTasksAPI.updateTask(row.task_id, {
+          titulo: titulo.trim(),
+          descricao,
+          jobId: jobId || null,
+          data,
+        });
+        await productionTasksAPI.updateAssignee(row.id, {
+          horaInicio: (horaInicio || null) as any,
+          horaFim: (horaFim || null) as any,
+          almocoMinutos: (almoco === "" ? null : Number(almoco)) as any,
+        });
+      } else {
+        await productionTasksAPI.create({
+          jobId: jobId || null,
+          titulo: titulo.trim(),
+          descricao,
+          data,
+          createdBy: currentUser?.id,
+          assigneeIds,
+          horaInicio: horaInicio || undefined,
+          horaFim: horaFim || undefined,
+          almocoMinutos: almoco !== "" ? Number(almoco) : undefined,
+        });
+      }
       await onSaved();
       onClose();
     } catch (error: any) {
-      console.error("Erro ao criar registo:", error);
-      alert(
-        `Erro ao criar registo: ${error?.message ?? error}`,
-      );
+      console.error("Erro ao guardar registo:", error);
+      alert(`Erro ao guardar registo: ${error?.message ?? error}`);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <form className="mt-3 grid gap-4" onSubmit={submit}>
-      <div className="space-y-2">
-        <Label>Projeto (Trabalho)</Label>
-        <JobPicker
-          jobs={jobs}
+    <form className="mt-3 grid gap-4 md:grid-cols-3" onSubmit={submit}>
+      <div className="space-y-2 md:col-span-3">
+        <Label>Tema / Trabalho *</Label>
+        <ScheduleJobPicker
           value={jobId}
-          onChange={setJobId}
+          titulo={titulo}
+          onPick={({ jobId, titulo }) => {
+            setJobId(jobId);
+            setTitulo(titulo);
+          }}
+          onClear={() => {
+            setJobId("");
+            setTitulo("");
+          }}
+          fallback={
+            <JobPicker
+              jobs={jobs}
+              value={jobId}
+              onChange={(id: string) => {
+                setJobId(id);
+                setTitulo(jobs.find((j: any) => j.id === id)?.title ?? "");
+              }}
+            />
+          }
         />
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2 md:col-span-2">
         <Label htmlFor="titulo">Título</Label>
         <Input
           id="titulo"
           value={titulo}
-          onChange={(e) => setTitulo(e.target.value)}
-          placeholder="Se vazio, usa o nome do trabalho"
+          readOnly
+          tabIndex={-1}
+          placeholder="Preenchido ao escolher o tema"
+          className="cursor-default bg-zinc-50 dark:bg-zinc-800"
         />
       </div>
 
@@ -825,64 +952,76 @@ function TaskForm({
         />
       </div>
 
+      <div className="space-y-2 md:col-span-3">
+        <Label htmlFor="descricao">O que foi feito *</Label>
+        <textarea
+          id="descricao"
+          value={descricao}
+          onChange={(e) => setDescricao(e.target.value)}
+          rows={3}
+          required
+          placeholder="Descreve o trabalho feito neste registo"
+          className="w-full resize-y rounded-md border border-zinc-200 bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-600/30 dark:border-zinc-700"
+        />
+      </div>
+
+      {!isEdit && (
+        <div className="space-y-2 md:col-span-3">
+          <Label>Utilizadores * ({assigneeIds.length} selecionados)</Label>
+          <div className="grid max-h-44 grid-cols-2 gap-1 overflow-y-auto rounded-md border border-zinc-200 p-2 dark:border-zinc-700 sm:grid-cols-3">
+            {users.map((u: any) => (
+              <label
+                key={u.id}
+                className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
+              >
+                <input
+                  type="checkbox"
+                  checked={assigneeIds.includes(u.id)}
+                  onChange={() => toggleUser(u.id)}
+                />
+                <span className="truncate">{u.nome}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="space-y-2">
-        <Label>
-          Utilizadores * ({assigneeIds.length} selecionados)
-        </Label>
-        <div className="grid max-h-44 grid-cols-2 gap-1 overflow-y-auto rounded-md border border-zinc-200 p-2 dark:border-zinc-700 sm:grid-cols-3">
-          {users.map((u: any) => (
-            <label
-              key={u.id}
-              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800"
-            >
-              <input
-                type="checkbox"
-                checked={assigneeIds.includes(u.id)}
-                onChange={() => toggleUser(u.id)}
-              />
-              <span className="truncate">{u.nome}</span>
-            </label>
-          ))}
-        </div>
+        <Label htmlFor="hi">Início</Label>
+        <Input
+          id="hi"
+          type="time"
+          value={horaInicio}
+          onChange={(e) => setHoraInicio(e.target.value)}
+        />
       </div>
-
-      <div className="grid grid-cols-3 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="hi">Início</Label>
-          <Input
-            id="hi"
-            type="time"
-            value={horaInicio}
-            onChange={(e) => setHoraInicio(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="hf">Fim</Label>
-          <Input
-            id="hf"
-            type="time"
-            value={horaFim}
-            onChange={(e) => setHoraFim(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="alm">Almoço (min)</Label>
-          <Input
-            id="alm"
-            type="number"
-            min={0}
-            value={almoco}
-            onChange={(e) => setAlmoco(e.target.value)}
-          />
-        </div>
+      <div className="space-y-2">
+        <Label htmlFor="hf">Fim</Label>
+        <Input
+          id="hf"
+          type="time"
+          value={horaFim}
+          onChange={(e) => setHoraFim(e.target.value)}
+        />
       </div>
-
-      <DialogFooter className="mt-2">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={onClose}
+      <div className="space-y-2">
+        <Label htmlFor="alm">Almoço</Label>
+        <select
+          id="alm"
+          value={almoco}
+          onChange={(e) => setAlmoco(e.target.value)}
+          className="h-10 w-full rounded-md border border-zinc-200 bg-transparent px-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-600/30 dark:border-zinc-700"
         >
+          {ALMOCO_OPCOES.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <DialogFooter className="mt-2 md:col-span-3">
+        <Button type="button" variant="outline" onClick={onClose}>
           Cancelar
         </Button>
         <Button
@@ -890,10 +1029,8 @@ function TaskForm({
           className="bg-red-600 hover:bg-red-700"
           disabled={loading}
         >
-          {loading && (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          )}
-          Criar Registo
+          {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {isEdit ? "Guardar Alterações" : "Criar Registo"}
         </Button>
       </DialogFooter>
     </form>

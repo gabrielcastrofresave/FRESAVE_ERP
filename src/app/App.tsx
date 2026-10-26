@@ -15,6 +15,7 @@ import { InsurancePage } from "./pages/InsurancePage";
 import { InspectionPage } from "./pages/InspectionPage";
 import { OthersPage } from "./pages/OthersPage";
 import { JobsPage } from "./pages/JobsPage";
+import { SchedulesPage } from "./pages/SchedulesPage";
 import { ProductionCalendarPage } from "./pages/ProductionCalendarPage";
 import { useApp } from "./AppContext";
 import { AppProvider } from "./AppContext";
@@ -47,6 +48,8 @@ function AppContent() {
         return <CalendarPage />;
       case "jobs":
         return <JobsPage />;
+        case "schedules":
+        return <SchedulesPage />;
       case "contabilidade":
         return <AccountingPage />;
       case "producao":
