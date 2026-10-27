@@ -44,6 +44,101 @@ const DAY_NAMES = [
   "Dom",
 ];
 
+// Altura de uma hora na grelha horária (px)
+const HOUR_PX = 56;
+
+// Cada utilizador tem uma cor fixa, para se distinguirem logo na grelha.
+// (Classes escritas por extenso para o Tailwind não as remover.)
+const CORES = [
+  {
+    bloco:
+      "bg-sky-100 border-sky-500 text-sky-900 dark:bg-sky-950/70 dark:border-sky-500 dark:text-sky-100",
+    ponto: "bg-sky-500",
+  },
+  {
+    bloco:
+      "bg-emerald-100 border-emerald-500 text-emerald-900 dark:bg-emerald-950/70 dark:border-emerald-500 dark:text-emerald-100",
+    ponto: "bg-emerald-500",
+  },
+  {
+    bloco:
+      "bg-amber-100 border-amber-500 text-amber-900 dark:bg-amber-950/70 dark:border-amber-500 dark:text-amber-100",
+    ponto: "bg-amber-500",
+  },
+  {
+    bloco:
+      "bg-violet-100 border-violet-500 text-violet-900 dark:bg-violet-950/70 dark:border-violet-500 dark:text-violet-100",
+    ponto: "bg-violet-500",
+  },
+  {
+    bloco:
+      "bg-fuchsia-100 border-fuchsia-500 text-fuchsia-900 dark:bg-fuchsia-950/70 dark:border-fuchsia-500 dark:text-fuchsia-100",
+    ponto: "bg-fuchsia-500",
+  },
+  {
+    bloco:
+      "bg-teal-100 border-teal-500 text-teal-900 dark:bg-teal-950/70 dark:border-teal-500 dark:text-teal-100",
+    ponto: "bg-teal-500",
+  },
+  {
+    bloco:
+      "bg-orange-100 border-orange-500 text-orange-900 dark:bg-orange-950/70 dark:border-orange-500 dark:text-orange-100",
+    ponto: "bg-orange-500",
+  },
+  {
+    bloco:
+      "bg-indigo-100 border-indigo-500 text-indigo-900 dark:bg-indigo-950/70 dark:border-indigo-500 dark:text-indigo-100",
+    ponto: "bg-indigo-500",
+  },
+];
+
+function chaveUtilizador(row: any) {
+  return String(row.user_id ?? nomeDoRegisto(row));
+}
+
+function corDoRegisto(row: any) {
+  const k = chaveUtilizador(row);
+  let h = 0;
+  for (let i = 0; i < k.length; i++) {
+    h = (h * 31 + k.charCodeAt(i)) >>> 0;
+  }
+  return CORES[h % CORES.length];
+}
+
+// "HH:MM" ou "HH:MM:SS" -> minutos desde as 00:00
+function toMinutes(t: string) {
+  const [h, m] = String(t).split(":");
+  return Number(h) * 60 + Number(m || 0);
+}
+
+function temHorario(row: any) {
+  return Boolean(row.hora_inicio && row.hora_fim);
+}
+
+function intervalo(row: any) {
+  return `${row.hora_inicio.slice(0, 5)}–${row.hora_fim.slice(0, 5)}`;
+}
+
+// Horas líquidas de um registo (usa o valor guardado, ou calcula pelo horário)
+function horasDoRegisto(row: any): number {
+  if (row.horas_liquidas != null) return Number(row.horas_liquidas);
+  if (temHorario(row)) {
+    const bruto =
+      toMinutes(row.hora_fim) - toMinutes(row.hora_inicio);
+    return Math.max(0, bruto - (row.almoco_minutos ?? 0)) / 60;
+  }
+  return 0;
+}
+
+function totalHoras(rows: any[]) {
+  return rows.reduce((acc, r) => acc + horasDoRegisto(r), 0);
+}
+
+function formatTotal(h: number) {
+  if (h <= 0) return "";
+  return `${h.toFixed(h % 1 === 0 ? 0 : 1)}h`;
+}
+
 // Data no formato YYYY-MM-DD, na hora local (toISOString devolvia o dia anterior em Lisboa)
 function toDateInput(date: Date) {
   const y = date.getFullYear();
@@ -128,6 +223,14 @@ function formatHoras(valor: any) {
   return valor != null ? `${Number(valor).toFixed(2)} h` : "—";
 }
 
+// Ordena: primeiro os que têm horário (por hora de início), depois os restantes
+function ordenar(a: any, b: any) {
+  const ha = temHorario(a) ? a.hora_inicio : "99:99";
+  const hb = temHorario(b) ? b.hora_inicio : "99:99";
+  if (ha !== hb) return ha < hb ? -1 : 1;
+  return nomeDoRegisto(a).localeCompare(nomeDoRegisto(b));
+}
+
 export function ProductionCalendarPage() {
   const { users, currentUser } = useApp();
 
@@ -200,7 +303,7 @@ export function ProductionCalendarPage() {
     [rows, selectedUserId],
   );
 
-  // Agrupa por dia uma única vez
+  // Agrupa por dia uma única vez (já ordenado por hora)
   const rowsPorDia = useMemo(() => {
     const mapa = new Map<string, any[]>();
     for (const r of filteredRows) {
@@ -209,11 +312,30 @@ export function ProductionCalendarPage() {
       if (lista) lista.push(r);
       else mapa.set(chave, [r]);
     }
+    for (const lista of mapa.values()) lista.sort(ordenar);
     return mapa;
   }, [filteredRows]);
 
-  const dayRows = (day: Date) =>
-    rowsPorDia.get(toDateInput(day)) ?? [];
+  // Legenda de cores: quem aparece neste período
+  const legenda = useMemo(() => {
+    const mapa = new Map<
+      string,
+      { nome: string; userId?: string; cor: (typeof CORES)[number] }
+    >();
+    for (const r of rows) {
+      const k = chaveUtilizador(r);
+      if (!mapa.has(k)) {
+        mapa.set(k, {
+          nome: nomeDoRegisto(r),
+          userId: r.user_id,
+          cor: corDoRegisto(r),
+        });
+      }
+    }
+    return Array.from(mapa.values()).sort((a, b) =>
+      a.nome.localeCompare(b.nome),
+    );
+  }, [rows]);
 
   // Os hooks ficam todos acima deste ponto. O controlo de acesso só é feito
   // depois, para o número de hooks ser sempre o mesmo entre renderizações.
@@ -240,6 +362,11 @@ export function ProductionCalendarPage() {
       d.setMonth(d.getMonth() + direction);
       return d;
     });
+  }
+
+  function abrirDia(day: Date) {
+    setCursor(day);
+    setView("dia");
   }
 
   const weekStart = startOfWeekMonday(cursor);
@@ -418,81 +545,65 @@ export function ProductionCalendarPage() {
           </div>
         </div>
 
+        {/* Legenda de cores */}
+        {legenda.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 border-b border-zinc-100 px-4 py-2.5 dark:border-zinc-800">
+            {legenda.map((l) => {
+              const ativo =
+                l.userId && selectedUserId === l.userId;
+              return (
+                <button
+                  key={l.nome}
+                  type="button"
+                  disabled={!l.userId}
+                  onClick={() =>
+                    l.userId &&
+                    setSelectedUserId(
+                      ativo ? "todos" : l.userId,
+                    )
+                  }
+                  title={
+                    l.userId
+                      ? ativo
+                        ? "Mostrar todos"
+                        : `Mostrar só ${l.nome}`
+                      : l.nome
+                  }
+                  className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    ativo
+                      ? "border-zinc-800 bg-zinc-800 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+                      : "border-zinc-200 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  }`}
+                >
+                  <span
+                    className={`h-2 w-2 rounded-full ${l.cor.ponto}`}
+                  />
+                  {l.nome}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {loading ? (
           <div className="flex min-h-[28rem] items-center justify-center text-sm text-zinc-400">
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />A
             carregar registos…
           </div>
-        ) : view === "dia" ? (
-          <div className="min-h-[20rem] space-y-2 p-4">
-            {dayRows(cursor).length === 0 ? (
-              <p className="py-10 text-center text-sm text-zinc-400">
-                Sem registos neste dia.
-              </p>
-            ) : (
-              dayRows(cursor).map((row: any) => (
-                <TaskPill
-                  key={row.id}
-                  row={row}
-                  onOpen={() => setDetalhe(row)}
-                  onEdit={() => setEditingRow(row)}
-                  onDelete={() => handleDeleteTask(row)}
-                />
-              ))
-            )}
-          </div>
-        ) : view === "semana" ? (
-          <div className="overflow-x-auto">
-            <div className="grid min-w-[840px] grid-cols-7 divide-x divide-zinc-100 dark:divide-zinc-800">
-              <div className="col-span-7 grid grid-cols-7 divide-x divide-zinc-100 bg-zinc-50 dark:divide-zinc-800 dark:bg-zinc-800/50">
-                {weekDays.map((day) => (
-                  <div
-                    key={day.toISOString()}
-                    className={`px-3 py-3 text-center ${
-                      isSameDay(day, new Date())
-                        ? "bg-red-50 dark:bg-red-950/20"
-                        : ""
-                    }`}
-                  >
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                      {DAY_NAMES[(day.getDay() + 6) % 7]}
-                    </p>
-                    <p
-                      className={`mt-1 text-lg font-semibold ${
-                        isSameDay(day, new Date())
-                          ? "text-red-600"
-                          : "text-zinc-700 dark:text-zinc-300"
-                      }`}
-                    >
-                      {day.getDate()}
-                    </p>
-                  </div>
-                ))}
-              </div>
-              {weekDays.map((day) => (
-                <div
-                  key={day.toISOString()}
-                  className="min-h-[20rem] space-y-2 bg-white p-2 dark:bg-zinc-900"
-                >
-                  {dayRows(day).map((row: any) => (
-                    <TaskPill
-                      key={row.id}
-                      compact
-                      row={row}
-                      onOpen={() => setDetalhe(row)}
-                      onEdit={() => setEditingRow(row)}
-                      onDelete={() => handleDeleteTask(row)}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
+        ) : view === "mes" ? (
           <MonthView
             cursor={cursor}
             rowsPorDia={rowsPorDia}
             onOpen={(row) => setDetalhe(row)}
+            onPickDay={abrirDia}
+          />
+        ) : (
+          <TimeGrid
+            days={view === "dia" ? [cursor] : weekDays}
+            rowsPorDia={rowsPorDia}
+            onOpen={(row) => setDetalhe(row)}
+            onPickDay={view === "semana" ? abrirDia : undefined}
+            soLista={selectedUserId === "todos"}
           />
         )}
       </section>
@@ -531,8 +642,8 @@ export function ProductionCalendarPage() {
                 <DetalheItem
                   label="Horário"
                   value={
-                    detalhe.hora_inicio && detalhe.hora_fim
-                      ? `${detalhe.hora_inicio.slice(0, 5)}–${detalhe.hora_fim.slice(0, 5)}`
+                    temHorario(detalhe)
+                      ? intervalo(detalhe)
                       : "Sem horário"
                   }
                 />
@@ -637,89 +748,423 @@ function DetalheItem({
   );
 }
 
-function TaskPill({
-  row,
+// ---------------------------------------------------------------------------
+// Grelha horária (vistas Dia e Semana)
+// ---------------------------------------------------------------------------
+
+type Posicionado = { row: any; s: number; e: number; col: number; cols: number };
+
+// Distribui registos sobrepostos lado a lado, em colunas
+function posicionar(rows: any[]): Posicionado[] {
+  const itens: Posicionado[] = rows
+    .filter(temHorario)
+    .map((row) => {
+      const s = toMinutes(row.hora_inicio);
+      const e = Math.max(toMinutes(row.hora_fim), s + 15);
+      return { row, s, e, col: 0, cols: 1 };
+    })
+    .sort((a, b) => a.s - b.s || b.e - a.e);
+
+  let grupo: Posicionado[] = [];
+  let fimColunas: number[] = [];
+  let fimGrupo = -1;
+
+  const fechar = () => {
+    for (const it of grupo) it.cols = fimColunas.length || 1;
+    grupo = [];
+    fimColunas = [];
+    fimGrupo = -1;
+  };
+
+  for (const it of itens) {
+    if (grupo.length && it.s >= fimGrupo) fechar();
+    let idx = fimColunas.findIndex((fim) => fim <= it.s);
+    if (idx === -1) {
+      idx = fimColunas.length;
+      fimColunas.push(it.e);
+    } else {
+      fimColunas[idx] = it.e;
+    }
+    it.col = idx;
+    fimGrupo = Math.max(fimGrupo, it.e);
+    grupo.push(it);
+  }
+  fechar();
+  return itens;
+}
+
+// Separa o que faz sentido pôr na grelha do que deve ir para a lista.
+// Se a MESMA pessoa tem registos com horários sobrepostos, não são slots reais
+// (são horas trabalhadas por tarefa), por isso vão para a lista em vez de
+// ficarem espremidos lado a lado. Registos sem horário também vão para a lista.
+function separar(rows: any[]) {
+  const grelha: any[] = [];
+  const lista: any[] = rows.filter((r) => !temHorario(r));
+
+  const porUtilizador = new Map<string, any[]>();
+  for (const r of rows.filter(temHorario)) {
+    const k = chaveUtilizador(r);
+    const l = porUtilizador.get(k);
+    if (l) l.push(r);
+    else porUtilizador.set(k, [r]);
+  }
+
+  for (const grupo of porUtilizador.values()) {
+    grupo.sort(
+      (a, b) =>
+        toMinutes(a.hora_inicio) - toMinutes(b.hora_inicio),
+    );
+    let cluster: any[] = [];
+    let fim = -1;
+    const fechar = () => {
+      (cluster.length > 1 ? lista : grelha).push(...cluster);
+      cluster = [];
+      fim = -1;
+    };
+    for (const r of grupo) {
+      const s = toMinutes(r.hora_inicio);
+      if (cluster.length && s >= fim) fechar();
+      cluster.push(r);
+      fim = Math.max(fim, toMinutes(r.hora_fim));
+    }
+    fechar();
+  }
+
+  lista.sort(ordenar);
+  return { grelha, lista };
+}
+
+function TimeGrid({
+  days,
+  rowsPorDia,
   onOpen,
-  onEdit,
-  onDelete,
-  compact = false,
+  onPickDay,
+  soLista = false,
 }: {
-  row: any;
-  onOpen: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  compact?: boolean;
+  days: Date[];
+  rowsPorDia: Map<string, any[]>;
+  onOpen: (row: any) => void;
+  onPickDay?: (day: Date) => void;
+  soLista?: boolean;
 }) {
-  const importada = !!row.origem_wintouch;
+  const hoje = new Date();
+  const unico = days.length === 1;
+
+  const porDia = days.map((day) => {
+    const lista = rowsPorDia.get(toDateInput(day)) ?? [];
+    // Sem utilizador escolhido: tudo em lista, ordenado por nome
+    if (soLista) {
+      return {
+        day,
+        lista,
+        posicionados: [] as Posicionado[],
+        semHorario: [...lista].sort(
+          (a, b) =>
+            nomeDoRegisto(a).localeCompare(nomeDoRegisto(b)) ||
+            ordenar(a, b),
+        ),
+      };
+    }
+    const { grelha, lista: paraLista } = separar(lista);
+    return {
+      day,
+      lista,
+      posicionados: posicionar(grelha),
+      semHorario: paraLista,
+    };
+  });
+
+  // Intervalo de horas visível: pelo menos 07–19, alarga se houver registos fora disto
+  let minMin = 7 * 60;
+  let maxMin = 19 * 60;
+  for (const d of porDia) {
+    for (const p of d.posicionados) {
+      minMin = Math.min(minMin, p.s);
+      maxMin = Math.max(maxMin, p.e);
+    }
+  }
+  const startH = Math.max(0, Math.floor(minMin / 60));
+  const endH = Math.min(24, Math.ceil(maxMin / 60));
+  const horas = Array.from(
+    { length: endH - startH },
+    (_, i) => startH + i,
+  );
+  const alturaTotal = horas.length * HOUR_PX;
+
+  const haSemHorario = porDia.some((d) => d.semHorario.length > 0);
+  const nowMin = hoje.getHours() * 60 + hoje.getMinutes();
+  const nowTop = ((nowMin - startH * 60) / 60) * HOUR_PX;
+  const nowVisivel = nowMin >= startH * 60 && nowMin <= endH * 60;
+
+  const colunas = {
+    gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))`,
+  };
 
   return (
-    <div
-      onClick={onOpen}
-      className={`group cursor-pointer rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 text-left transition-shadow hover:shadow-sm dark:border-zinc-700 dark:bg-zinc-800 ${
-        compact ? "p-2" : ""
-      }`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <p className="min-w-0 truncate text-xs font-semibold text-zinc-900 dark:text-zinc-50">
-          {row.titulo || "(sem título)"}
-        </p>
-        <div className="flex shrink-0 gap-2">
-          {!importada && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onEdit();
-              }}
-              className="text-[10px] text-zinc-600 hover:underline dark:text-zinc-300"
-            >
-              editar
-            </button>
-          )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-            className="text-[10px] text-red-600 hover:underline dark:text-red-400"
-          >
-            apagar
-          </button>
+    <div className="overflow-x-auto">
+      <div style={{ minWidth: unico ? 0 : 960 }}>
+        {/* Cabeçalho dos dias */}
+        <div className="flex border-b border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/50">
+          {!soLista && <div className="w-12 shrink-0" />}
+          <div className="grid flex-1" style={colunas}>
+            {porDia.map(({ day, lista }) => {
+              const hojeCol = isSameDay(day, hoje);
+              const total = formatTotal(totalHoras(lista));
+              return (
+                <button
+                  key={toDateInput(day)}
+                  type="button"
+                  disabled={!onPickDay}
+                  onClick={() => onPickDay?.(day)}
+                  className={`min-w-0 border-l border-zinc-100 px-2 py-2.5 text-center first:border-l-0 dark:border-zinc-800 ${
+                    hojeCol ? "bg-red-50 dark:bg-red-950/20" : ""
+                  } ${onPickDay ? "hover:bg-zinc-100 dark:hover:bg-zinc-800" : "cursor-default"}`}
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                    {DAY_NAMES[(day.getDay() + 6) % 7]}
+                  </p>
+                  <p
+                    className={`text-lg font-semibold leading-tight ${
+                      hojeCol
+                        ? "text-red-600"
+                        : "text-zinc-700 dark:text-zinc-300"
+                    }`}
+                  >
+                    {day.getDate()}
+                  </p>
+                  <p className="mt-0.5 h-3.5 text-[10px] text-zinc-400">
+                    {lista.length > 0
+                      ? `${lista.length} reg.${total ? ` · ${total}` : ""}`
+                      : ""}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
-      <p className="mt-1 truncate text-[11px] font-medium text-zinc-700 dark:text-zinc-300">
-        {nomeDoRegisto(row)}
-      </p>
-      {row.descricao && (
-        <p className="mt-1 line-clamp-2 text-[11px] text-zinc-500 dark:text-zinc-400">
-          {row.descricao}
-        </p>
-      )}
-      <div className="mt-2 flex items-center justify-between gap-2 text-[10px]">
-        <span className="text-zinc-500 dark:text-zinc-400">
-          {importada
-            ? formatHoras(row.horas_liquidas)
-            : row.hora_inicio && row.hora_fim
-              ? `${row.hora_inicio.slice(0, 5)}–${row.hora_fim.slice(0, 5)}`
-              : "Sem horário"}
-        </span>
-        {importada && (
-          <span className="text-[10px] text-zinc-400">
-            Wintouch
-          </span>
+
+        {/* Registos sem horário (ex.: horas importadas do Wintouch) */}
+        {(haSemHorario || soLista) && (
+          <div
+            className={`flex bg-zinc-50/60 dark:bg-zinc-900 ${
+              soLista
+                ? ""
+                : "border-b border-zinc-100 dark:border-zinc-800"
+            }`}
+          >
+            {!soLista && (
+              <div className="flex w-12 shrink-0 items-start justify-end pr-2 pt-2 text-[9px] font-semibold uppercase leading-tight tracking-wide text-zinc-400">
+                Lista
+              </div>
+            )}
+            <div className="grid flex-1" style={colunas}>
+              {porDia.map(({ day, semHorario }) => (
+                <div
+                  key={toDateInput(day)}
+                  className={`min-w-0 space-y-1 border-l border-zinc-100 p-1.5 first:border-l-0 dark:border-zinc-800 ${
+                    soLista ? "min-h-[20rem]" : ""
+                  } ${
+                    soLista && isSameDay(day, hoje)
+                      ? "bg-red-50/40 dark:bg-red-950/10"
+                      : ""
+                  }`}
+                >
+                  {soLista && semHorario.length === 0 && (
+                    <p className="py-6 text-center text-[11px] text-zinc-400">
+                      Sem registos
+                    </p>
+                  )}
+                  {semHorario.map((row) => (
+                    <SemHorarioChip
+                      key={row.id}
+                      row={row}
+                      onOpen={() => onOpen(row)}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Corpo com as horas (só quando há um utilizador escolhido) */}
+        {!soLista && (
+        <div className="flex" style={{ height: alturaTotal }}>
+          <div className="relative w-12 shrink-0">
+            {horas.map((h, i) => (
+              <span
+                key={h}
+                className="absolute right-2 -translate-y-1/2 text-[10px] text-zinc-400"
+                style={{ top: i * HOUR_PX, display: i === 0 ? "none" : undefined }}
+              >
+                {String(h).padStart(2, "0")}:00
+              </span>
+            ))}
+          </div>
+          <div className="grid flex-1" style={colunas}>
+            {porDia.map(({ day, posicionados }) => {
+              const hojeCol = isSameDay(day, hoje);
+              return (
+                <div
+                  key={toDateInput(day)}
+                  className={`relative border-l border-zinc-100 first:border-l-0 dark:border-zinc-800 ${
+                    hojeCol ? "bg-red-50/30 dark:bg-red-950/10" : ""
+                  }`}
+                  style={{
+                    height: alturaTotal,
+                    backgroundImage: `repeating-linear-gradient(to bottom, transparent 0, transparent ${HOUR_PX - 1}px, rgba(161,161,170,0.28) ${HOUR_PX - 1}px, rgba(161,161,170,0.28) ${HOUR_PX}px)`,
+                  }}
+                >
+                  {posicionados.map((p) => (
+                    <BlocoHorario
+                      key={p.row.id}
+                      item={p}
+                      startMin={startH * 60}
+                      largo={unico}
+                      onOpen={() => onOpen(p.row)}
+                    />
+                  ))}
+                  {hojeCol && nowVisivel && (
+                    <div
+                      className="pointer-events-none absolute left-0 right-0 z-20 flex items-center"
+                      style={{ top: nowTop }}
+                    >
+                      <span className="-ml-1 h-2 w-2 rounded-full bg-red-600" />
+                      <span className="h-px flex-1 bg-red-600" />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
         )}
       </div>
     </div>
   );
 }
 
+function BlocoHorario({
+  item,
+  startMin,
+  largo,
+  onOpen,
+}: {
+  item: Posicionado;
+  startMin: number;
+  largo: boolean;
+  onOpen: () => void;
+}) {
+  const { row, s, e, col, cols } = item;
+  const top = ((s - startMin) / 60) * HOUR_PX;
+  const altura = Math.max(((e - s) / 60) * HOUR_PX, 22);
+  const cor = corDoRegisto(row);
+  const baixo = altura < 40;
+  const estreito = cols > 2 && !largo;
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={`${nomeDoRegisto(row)} · ${row.titulo ?? ""} · ${intervalo(row)}`}
+      className={`absolute z-10 overflow-hidden rounded-md border-l-4 px-1.5 py-1 text-left shadow-sm transition hover:z-30 hover:shadow-md hover:brightness-95 ${cor.bloco}`}
+      style={{
+        top,
+        height: altura - 2,
+        left: `calc(${(col / cols) * 100}% + 2px)`,
+        width: `calc(${100 / cols}% - 4px)`,
+      }}
+    >
+      {baixo ? (
+        <p className="truncate text-[11px] font-semibold leading-tight">
+          {nomeDoRegisto(row)}
+          {!estreito && (
+            <span className="ml-1 font-normal opacity-75">
+              {intervalo(row)}
+            </span>
+          )}
+        </p>
+      ) : (
+        <>
+          <p className="truncate text-[11px] font-semibold leading-tight">
+            {nomeDoRegisto(row)}
+          </p>
+          <p className="truncate text-[10px] leading-tight opacity-80">
+            {intervalo(row)}
+          </p>
+          {row.titulo && (
+            <p className="mt-0.5 line-clamp-2 break-words text-[10px] leading-tight opacity-90">
+              {row.titulo}
+            </p>
+          )}
+          {altura > 100 && row.descricao && (
+            <p className="mt-1 line-clamp-3 break-words text-[10px] leading-tight opacity-70">
+              {row.descricao}
+            </p>
+          )}
+        </>
+      )}
+    </button>
+  );
+}
+
+function SemHorarioChip({
+  row,
+  onOpen,
+}: {
+  row: any;
+  onOpen: () => void;
+}) {
+  const cor = corDoRegisto(row);
+  const horas = formatTotal(horasDoRegisto(row));
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={`${nomeDoRegisto(row)} · ${row.titulo ?? ""}`}
+      className={`block w-full rounded border-l-4 px-1.5 py-1 text-left text-[10px] hover:brightness-95 ${cor.bloco}`}
+    >
+      <span className="flex items-center gap-1.5">
+        <span className="min-w-0 flex-1 truncate font-semibold">
+          {nomeDoRegisto(row)}
+        </span>
+        {horas && (
+          <span className="shrink-0 font-semibold">{horas}</span>
+        )}
+        {row.origem_wintouch && (
+          <span className="shrink-0 rounded bg-white/60 px-1 text-[9px] uppercase tracking-wide dark:bg-black/30">
+            W
+          </span>
+        )}
+      </span>
+      {row.titulo && (
+        <span className="block truncate opacity-90">
+          {row.titulo}
+        </span>
+      )}
+      {temHorario(row) && (
+        <span className="block opacity-70">{intervalo(row)}</span>
+      )}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Vista Mês
+// ---------------------------------------------------------------------------
+
+const MAX_POR_DIA_MES = 4;
+
 function MonthView({
   cursor,
   rowsPorDia,
   onOpen,
+  onPickDay,
 }: {
   cursor: Date;
   rowsPorDia: Map<string, any[]>;
   onOpen: (row: any) => void;
+  onPickDay: (day: Date) => void;
 }) {
   const first = startOfWeekMonday(
     new Date(cursor.getFullYear(), cursor.getMonth(), 1),
@@ -730,7 +1175,7 @@ function MonthView({
 
   return (
     <div className="overflow-x-auto">
-      <div className="min-w-[760px]">
+      <div className="min-w-[860px]">
         <div className="grid grid-cols-7 border-b border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-800/50">
           {DAY_NAMES.map((d) => (
             <div
@@ -747,40 +1192,69 @@ function MonthView({
               rowsPorDia.get(toDateInput(day)) ?? [];
             const currentMonth =
               day.getMonth() === cursor.getMonth();
+            const hoje = isSameDay(day, new Date());
+            const total = formatTotal(totalHoras(dRows));
             return (
               <div
                 key={day.toISOString()}
-                className={`min-h-[6.5rem] p-2 ${
+                className={`min-h-[8.5rem] p-1.5 ${
                   currentMonth
                     ? "bg-white dark:bg-zinc-900"
                     : "bg-zinc-50/60 dark:bg-zinc-900/40"
                 }`}
               >
-                <div
-                  className={`mb-1 text-xs font-medium ${
-                    isSameDay(day, new Date())
-                      ? "grid h-6 w-6 place-items-center rounded-full bg-red-600 text-white"
-                      : currentMonth
-                        ? "text-zinc-700 dark:text-zinc-300"
-                        : "text-zinc-300 dark:text-zinc-700"
-                  }`}
-                >
-                  {day.getDate()}
+                <div className="mb-1 flex items-center justify-between px-0.5">
+                  <button
+                    type="button"
+                    onClick={() => onPickDay(day)}
+                    className={`text-xs font-medium hover:underline ${
+                      hoje
+                        ? "grid h-6 w-6 place-items-center rounded-full bg-red-600 text-white no-underline"
+                        : currentMonth
+                          ? "text-zinc-700 dark:text-zinc-300"
+                          : "text-zinc-300 dark:text-zinc-700"
+                    }`}
+                  >
+                    {day.getDate()}
+                  </button>
+                  {total && (
+                    <span className="text-[10px] text-zinc-400">
+                      {total}
+                    </span>
+                  )}
                 </div>
-                <div className="space-y-1">
-                  {dRows.slice(0, 3).map((row: any) => (
+                <div className="space-y-0.5">
+                  {dRows.slice(0, MAX_POR_DIA_MES).map((row: any) => {
+                    const cor = corDoRegisto(row);
+                    return (
+                      <button
+                        key={row.id}
+                        onClick={() => onOpen(row)}
+                        title={`${nomeDoRegisto(row)} · ${row.titulo ?? ""}`}
+                        className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left text-[10px] text-zinc-700 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                      >
+                        <span
+                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${cor.ponto}`}
+                        />
+                        {temHorario(row) && (
+                          <span className="shrink-0 tabular-nums text-zinc-400">
+                            {row.hora_inicio.slice(0, 5)}
+                          </span>
+                        )}
+                        <span className="min-w-0 truncate font-medium">
+                          {nomeDoRegisto(row)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {dRows.length > MAX_POR_DIA_MES && (
                     <button
-                      key={row.id}
-                      onClick={() => onOpen(row)}
-                      className="block w-full truncate rounded bg-zinc-100 px-1.5 py-1 text-left text-[10px] font-medium text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
+                      type="button"
+                      onClick={() => onPickDay(day)}
+                      className="px-1 text-[10px] font-medium text-red-600 hover:underline"
                     >
-                      {nomeDoRegisto(row)} · {row.titulo}
+                      +{dRows.length - MAX_POR_DIA_MES} mais
                     </button>
-                  ))}
-                  {dRows.length > 3 && (
-                    <p className="px-1 text-[10px] text-zinc-400">
-                      +{dRows.length - 3} registos
-                    </p>
                   )}
                 </div>
               </div>

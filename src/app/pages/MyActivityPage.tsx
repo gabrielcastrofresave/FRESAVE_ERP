@@ -55,6 +55,15 @@ const PAUSAS_LANCHE: [number, number][] = [
 // Hora de início usada quando o registo é feito por "horas trabalhadas"
 const HORA_INICIO_PADRAO = "08:00";
 
+// Registo feito por "horas trabalhadas": guardado com início 08:00 e sem almoço.
+// Nestes registos o horário não é real, por isso não deve ser mostrado.
+function foiPorHoras(row: any) {
+  return (
+    row?.hora_inicio?.slice(0, 5) === HORA_INICIO_PADRAO &&
+    (row?.almoco_minutos ?? 0) === 0
+  );
+}
+
 // Opções de almoço (valor em minutos; "0" = não almoçou)
 const ALMOCO_OPCOES = [
   { value: "0", label: "Não almocei" },
@@ -283,7 +292,7 @@ function downloadCsv(
     ...rows.map((row) => row.map(escapeCell).join(";")),
   ];
   downloadBlob(
-    new Blob(["﻿" + lines.join("\r\n")], {
+    new Blob(["\uFEFF" + lines.join("\r\n")], {
       type: "text/csv;charset=utf-8;",
     }),
     filename,
@@ -309,21 +318,28 @@ function buildExport(
           String(b.hora_inicio ?? ""),
         ),
     )
-    .map((r) => ({
-      chave: chaveDia(r),
-      data: formatDataCurta(chaveDia(r)),
-      titulo: r.titulo || "(sem título)",
-      descricao: r.descricao || "",
-      inicio: r.hora_inicio?.slice(0, 5) ?? "",
-      fim: r.hora_fim?.slice(0, 5) ?? "",
-      almoco: almocoTexto(r.almoco_minutos),
-      mins:
-        netMinutes(
-          r.hora_inicio,
-          r.hora_fim,
-          r.almoco_minutos,
-        ) ?? 0,
-    }));
+    .map((r) => {
+      const porHoras = foiPorHoras(r);
+      return {
+        chave: chaveDia(r),
+        data: formatDataCurta(chaveDia(r)),
+        titulo: r.titulo || "(sem título)",
+        descricao: r.descricao || "",
+        porHoras,
+        // Registos por "horas trabalhadas" não têm horário nem almoço reais
+        inicio: porHoras
+          ? ""
+          : (r.hora_inicio?.slice(0, 5) ?? ""),
+        fim: porHoras ? "" : (r.hora_fim?.slice(0, 5) ?? ""),
+        almoco: porHoras ? "-" : almocoTexto(r.almoco_minutos),
+        mins:
+          netMinutes(
+            r.hora_inicio,
+            r.hora_fim,
+            r.almoco_minutos,
+          ) ?? 0,
+      };
+    });
   const total = linhas.reduce((s, l) => s + l.mins, 0);
   return { from, to, linhas, total };
 }
@@ -359,7 +375,15 @@ function exportarExcel(
   ]);
   downloadCsv(
     `atividade_${d.from}_${d.to}.csv`,
-    ["Data", "Título", "Descrição", "Início", "Fim", "Almoço", "Horas"],
+    [
+      "Data",
+      "Título",
+      "Descrição",
+      "Início",
+      "Fim",
+      "Almoço",
+      "Horas",
+    ],
     linhas,
   );
 }
@@ -390,7 +414,11 @@ function exportarWord(
               ? `<br/><span style="color:#71717a; font-size:12px;">${escapeHtml(l.descricao)}</span>`
               : ""
           }</td>
-          <td style="${td}">${escapeHtml(l.inicio)}–${escapeHtml(l.fim)}</td>
+          <td style="${td}">${
+            l.porHoras
+              ? "—"
+              : `${escapeHtml(l.inicio)}–${escapeHtml(l.fim)}`
+          }</td>
           <td style="${td}">${escapeHtml(l.almoco)}</td>
           <td style="${tdR} font-weight:bold;">${formatHorasNumero(l.mins)} h</td>
         </tr>`,
@@ -462,7 +490,7 @@ function exportarWord(
     `;
 
   downloadBlob(
-    new Blob(["﻿", html], { type: "application/msword" }),
+    new Blob(["\uFEFF", html], { type: "application/msword" }),
     `atividade_${d.from}_${d.to}.doc`,
   );
 }
@@ -870,7 +898,9 @@ function TaskPill({
       {row.descricao && (
         <p
           className={`mt-1 min-w-0 text-[11px] text-zinc-500 dark:text-zinc-400 ${
-            wrap ? "whitespace-pre-line break-words" : "line-clamp-2"
+            wrap
+              ? "whitespace-pre-line break-words"
+              : "line-clamp-2"
           }`}
         >
           {row.descricao}
@@ -878,9 +908,11 @@ function TaskPill({
       )}
       <div className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[10px]">
         <span className="text-zinc-500 dark:text-zinc-400">
-          {row.hora_inicio && row.hora_fim
-            ? `${row.hora_inicio.slice(0, 5)}–${row.hora_fim.slice(0, 5)}`
-            : "Sem horário"}
+          {foiPorHoras(row)
+            ? "Horas trabalhadas"
+            : row.hora_inicio && row.hora_fim
+              ? `${row.hora_inicio.slice(0, 5)}–${row.hora_fim.slice(0, 5)}`
+              : "Sem horário"}
         </span>
         {liquidos !== null && (
           <span className="font-bold text-zinc-900 dark:text-zinc-50">
@@ -1062,7 +1094,10 @@ function JobSearchPicker({
 
   // Debounce da pesquisa por texto
   useEffect(() => {
-    const t = setTimeout(() => setSearch(searchInput.trim()), 300);
+    const t = setTimeout(
+      () => setSearch(searchInput.trim()),
+      300,
+    );
     return () => clearTimeout(t);
   }, [searchInput]);
 
@@ -1252,14 +1287,20 @@ function RegistoForm({
   onSaved: () => Promise<void>;
 }) {
   const isEdit = Boolean(row);
+  // Ao editar um registo feito por "horas trabalhadas", abre já nesse modo
+  const porHorasInicial = isEdit && foiPorHoras(row);
   const [loading, setLoading] = useState(false);
-  const [modo, setModo] = useState<ModoRegisto>("horario");
+  const [modo, setModo] = useState<ModoRegisto>(
+    porHorasInicial ? "horas" : "horario",
+  );
   const [titulo, setTitulo] = useState(
     row?.titulo && row.titulo !== "(sem título)"
       ? row.titulo
       : "",
   );
-  const [descricao, setDescricao] = useState(row?.descricao ?? "");
+  const [descricao, setDescricao] = useState(
+    row?.descricao ?? "",
+  );
   const [jobId, setJobId] = useState(row?.job_id ?? "");
   const [data, setData] = useState(
     row?.data
@@ -1278,9 +1319,22 @@ function RegistoForm({
       : "",
   );
   // Modo "horas trabalhadas": número de horas líquidas (aceita vírgula ou ponto)
-  const [horasTrabalhadas, setHorasTrabalhadas] = useState("");
+  const [horasTrabalhadas, setHorasTrabalhadas] = useState(
+    porHorasInicial
+      ? String(
+          Math.round(
+            ((netMinutes(row.hora_inicio, row.hora_fim, 0) ??
+              0) /
+              60) *
+              100,
+          ) / 100,
+        ).replace(".", ",")
+      : "",
+  );
 
-  const horasNumero = Number(horasTrabalhadas.replace(",", "."));
+  const horasNumero = Number(
+    horasTrabalhadas.replace(",", "."),
+  );
   const horasValidas =
     horasTrabalhadas.trim() !== "" &&
     Number.isFinite(horasNumero) &&
@@ -1324,7 +1378,9 @@ function RegistoForm({
         Math.round(horasNumero * 60),
       );
       if (!fim) {
-        alert("Não foi possível calcular o horário para essas horas.");
+        alert(
+          "Não foi possível calcular o horário para essas horas.",
+        );
         return;
       }
       inicioFinal = HORA_INICIO_PADRAO;
@@ -1524,7 +1580,9 @@ function RegistoForm({
             type="text"
             inputMode="decimal"
             value={horasTrabalhadas}
-            onChange={(e) => setHorasTrabalhadas(e.target.value)}
+            onChange={(e) =>
+              setHorasTrabalhadas(e.target.value)
+            }
             placeholder="Ex.: 7,5"
             required
           />
