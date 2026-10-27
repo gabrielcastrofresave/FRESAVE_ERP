@@ -11,6 +11,7 @@ import { useApp } from "../AppContext";
 import { productionTasksAPI, jobsAPI } from "../api";
 import { Button } from "../components/ui/button";
 import { ScheduleJobPicker } from "../components/ScheduleJobPicker";
+import { JobSearchPicker } from "../components/JobSearchPicker";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import {
@@ -29,8 +30,6 @@ import {
   FileText,
   Loader2,
   Plus,
-  Search,
-  X,
 } from "lucide-react";
 
 type ViewMode = "dia" | "semana" | "mes";
@@ -327,9 +326,7 @@ function buildExport(
         descricao: r.descricao || "",
         porHoras,
         // Registos por "horas trabalhadas" não têm horário nem almoço reais
-        inicio: porHoras
-          ? ""
-          : (r.hora_inicio?.slice(0, 5) ?? ""),
+        inicio: porHoras ? "" : (r.hora_inicio?.slice(0, 5) ?? ""),
         fim: porHoras ? "" : (r.hora_fim?.slice(0, 5) ?? ""),
         almoco: porHoras ? "-" : almocoTexto(r.almoco_minutos),
         mins:
@@ -375,15 +372,7 @@ function exportarExcel(
   ]);
   downloadCsv(
     `atividade_${d.from}_${d.to}.csv`,
-    [
-      "Data",
-      "Título",
-      "Descrição",
-      "Início",
-      "Fim",
-      "Almoço",
-      "Horas",
-    ],
+    ["Data", "Título", "Descrição", "Início", "Fim", "Almoço", "Horas"],
     linhas,
   );
 }
@@ -898,9 +887,7 @@ function TaskPill({
       {row.descricao && (
         <p
           className={`mt-1 min-w-0 text-[11px] text-zinc-500 dark:text-zinc-400 ${
-            wrap
-              ? "whitespace-pre-line break-words"
-              : "line-clamp-2"
+            wrap ? "whitespace-pre-line break-words" : "line-clamp-2"
           }`}
         >
           {row.descricao}
@@ -1047,231 +1034,6 @@ function AlmocoSelect({
   );
 }
 
-// Seletor de trabalho com os mesmos filtros da página de Trabalhos:
-// tipo de referência (PROD, PROD_INT, ...), ano, n.º interno e pesquisa por título/rastreio
-const SELECT_CLASS =
-  "h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200";
-
-function JobSearchPicker({
-  value,
-  onChange,
-  onPickJob,
-  knownJobs,
-}: {
-  value: string;
-  onChange: (jobId: string) => void;
-  onPickJob?: (job: any) => void;
-  knownJobs: any[];
-}) {
-  const [refTypes, setRefTypes] = useState<string[]>([]);
-  const [refYears, setRefYears] = useState<string[]>([]);
-  const [searchInput, setSearchInput] = useState("");
-  const [search, setSearch] = useState("");
-  const [referenceType, setReferenceType] = useState("");
-  const [referenceYear, setReferenceYear] = useState("");
-  const [referenceNumber, setReferenceNumber] = useState("");
-  const [results, setResults] = useState<any[]>([]);
-  const [searching, setSearching] = useState(false);
-  const [selectedJob, setSelectedJob] = useState<any | null>(
-    null,
-  );
-  const pedido = useRef(0);
-
-  // Opções dos filtros (uma vez)
-  useEffect(() => {
-    Promise.all([
-      jobsAPI.getAllReferenceTypes(),
-      jobsAPI.getAllReferenceYears(),
-    ])
-      .then(([types, years]) => {
-        setRefTypes(types);
-        setRefYears(years);
-      })
-      .catch((error: unknown) =>
-        console.error("Erro ao carregar filtros:", error),
-      );
-  }, []);
-
-  // Debounce da pesquisa por texto
-  useEffect(() => {
-    const t = setTimeout(
-      () => setSearch(searchInput.trim()),
-      300,
-    );
-    return () => clearTimeout(t);
-  }, [searchInput]);
-
-  // Pesquisa trabalhos em curso com os filtros atuais
-  useEffect(() => {
-    const id = ++pedido.current;
-    setSearching(true);
-    jobsAPI
-      .getPage(1, 20, {
-        status: "em_curso",
-        search: search || undefined,
-        referenceType: referenceType || undefined,
-        referenceYear: referenceYear || undefined,
-        referenceNumber: referenceNumber.trim() || undefined,
-      })
-      .then((data: any) => {
-        if (id === pedido.current) setResults(data.jobs ?? []);
-      })
-      .catch((error: unknown) =>
-        console.error("Erro ao pesquisar trabalhos:", error),
-      )
-      .finally(() => {
-        if (id === pedido.current) setSearching(false);
-      });
-  }, [search, referenceType, referenceYear, referenceNumber]);
-
-  // Trabalho escolhido: o que acabou de ser clicado, ou o que já vinha associado ao registo
-  const escolhido =
-    selectedJob?.id === value
-      ? selectedJob
-      : (knownJobs.find((j) => j.id === value) ??
-        results.find((j) => j.id === value) ??
-        null);
-
-  const temFiltros =
-    searchInput !== "" ||
-    referenceType !== "" ||
-    referenceYear !== "" ||
-    referenceNumber !== "";
-
-  function limparFiltros() {
-    setSearchInput("");
-    setSearch("");
-    setReferenceType("");
-    setReferenceYear("");
-    setReferenceNumber("");
-  }
-
-  return (
-    <div className="space-y-2">
-      {value && (
-        <div className="flex items-center justify-between gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 dark:border-red-900 dark:bg-red-950/30">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
-              {escolhido?.title ?? "Trabalho selecionado"}
-            </p>
-            {escolhido?.reference && (
-              <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
-                {escolhido.reference}
-              </p>
-            )}
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 shrink-0"
-            onClick={() => {
-              setSelectedJob(null);
-              onChange("");
-            }}
-            aria-label="Remover trabalho"
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
-
-      <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto_auto]">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-          <Input
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Pesquisar por título ou rastreio"
-            className="h-9 pl-9"
-          />
-        </div>
-        <select
-          value={referenceType}
-          onChange={(e) => setReferenceType(e.target.value)}
-          className={SELECT_CLASS}
-        >
-          <option value="">Tipo de Ref.</option>
-          {refTypes.map((t) => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
-        <select
-          value={referenceYear}
-          onChange={(e) => setReferenceYear(e.target.value)}
-          className={SELECT_CLASS}
-        >
-          <option value="">Ano</option>
-          {refYears.map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
-        <Input
-          value={referenceNumber}
-          onChange={(e) => setReferenceNumber(e.target.value)}
-          placeholder="N.º interno"
-          className="h-9 sm:w-32"
-        />
-      </div>
-
-      <div className="max-h-48 overflow-y-auto rounded-md border border-zinc-200 dark:border-zinc-700">
-        {searching && results.length === 0 ? (
-          <p className="flex items-center px-3 py-3 text-xs text-zinc-400">
-            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-            A pesquisar…
-          </p>
-        ) : results.length === 0 ? (
-          <div className="flex items-center justify-between px-3 py-3">
-            <p className="text-xs text-zinc-400">
-              Nenhum trabalho em curso corresponde à pesquisa.
-            </p>
-            {temFiltros && (
-              <button
-                type="button"
-                onClick={limparFiltros}
-                className="text-xs font-medium text-red-600"
-              >
-                Limpar
-              </button>
-            )}
-          </div>
-        ) : (
-          <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {results.map((job) => (
-              <li key={job.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedJob(job);
-                    onChange(job.id);
-                    onPickJob?.(job);
-                  }}
-                  className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/60 ${
-                    job.id === value
-                      ? "bg-red-50/60 dark:bg-red-950/20"
-                      : ""
-                  }`}
-                >
-                  <span className="min-w-0 truncate text-sm text-zinc-800 dark:text-zinc-100">
-                    {job.title}
-                  </span>
-                  <span className="shrink-0 font-mono text-[11px] text-zinc-400">
-                    {job.reference}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // Formulário único: cria um registo novo ou edita um existente (se vier "row")
 function RegistoForm({
   row,
@@ -1298,9 +1060,7 @@ function RegistoForm({
       ? row.titulo
       : "",
   );
-  const [descricao, setDescricao] = useState(
-    row?.descricao ?? "",
-  );
+  const [descricao, setDescricao] = useState(row?.descricao ?? "");
   const [jobId, setJobId] = useState(row?.job_id ?? "");
   const [data, setData] = useState(
     row?.data
@@ -1323,8 +1083,7 @@ function RegistoForm({
     porHorasInicial
       ? String(
           Math.round(
-            ((netMinutes(row.hora_inicio, row.hora_fim, 0) ??
-              0) /
+            ((netMinutes(row.hora_inicio, row.hora_fim, 0) ?? 0) /
               60) *
               100,
           ) / 100,
@@ -1332,9 +1091,7 @@ function RegistoForm({
       : "",
   );
 
-  const horasNumero = Number(
-    horasTrabalhadas.replace(",", "."),
-  );
+  const horasNumero = Number(horasTrabalhadas.replace(",", "."));
   const horasValidas =
     horasTrabalhadas.trim() !== "" &&
     Number.isFinite(horasNumero) &&
@@ -1378,9 +1135,7 @@ function RegistoForm({
         Math.round(horasNumero * 60),
       );
       if (!fim) {
-        alert(
-          "Não foi possível calcular o horário para essas horas.",
-        );
+        alert("Não foi possível calcular o horário para essas horas.");
         return;
       }
       inicioFinal = HORA_INICIO_PADRAO;
@@ -1462,8 +1217,9 @@ function RegistoForm({
             setJobId("");
             setTitulo("");
           }}
-          fallback={
+          fallback={(pesquisa: string) => (
             <JobSearchPicker
+              initialSearch={pesquisa}
               value={jobId}
               onChange={(id) => {
                 setJobId(id);
@@ -1472,7 +1228,7 @@ function RegistoForm({
               onPickJob={(job) => setTitulo(job.title ?? "")}
               knownJobs={jobs}
             />
-          }
+          )}
         />
       </div>
 
@@ -1580,9 +1336,7 @@ function RegistoForm({
             type="text"
             inputMode="decimal"
             value={horasTrabalhadas}
-            onChange={(e) =>
-              setHorasTrabalhadas(e.target.value)
-            }
+            onChange={(e) => setHorasTrabalhadas(e.target.value)}
             placeholder="Ex.: 7,5"
             required
           />

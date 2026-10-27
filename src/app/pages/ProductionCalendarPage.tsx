@@ -11,7 +11,7 @@ import { useApp } from "../AppContext";
 import { productionTasksAPI, jobsAPI } from "../api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { JobPicker } from "../components/JobPicker";
+import { JobSearchPicker } from "../components/JobSearchPicker";
 import { ScheduleJobPicker } from "../components/ScheduleJobPicker";
 import { Label } from "../components/ui/label";
 import {
@@ -1390,16 +1390,18 @@ function TaskForm({
             setJobId("");
             setTitulo("");
           }}
-          fallback={
-            <JobPicker
-              jobs={jobs}
+          fallback={(pesquisa: string) => (
+            <JobSearchPicker
+              initialSearch={pesquisa}
               value={jobId}
               onChange={(id: string) => {
                 setJobId(id);
-                setTitulo(jobs.find((j: any) => j.id === id)?.title ?? "");
+                if (!id) setTitulo("");
               }}
+              onPickJob={(job: any) => setTitulo(job.title ?? "")}
+              knownJobs={jobs}
             />
-          }
+          )}
         />
       </div>
 
