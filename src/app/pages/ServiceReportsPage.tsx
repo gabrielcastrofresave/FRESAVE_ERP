@@ -67,22 +67,30 @@ const formatDateTime = (value: string) =>
   }).format(new Date(value));
 
 const toDateInput = (value?: string | null) =>
-  value ? new Date(value).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+  value
+    ? new Date(value).toISOString().slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
 
 const getReportStart = (report: ServiceReport) => {
   if (report.start_date) return report.start_date;
-  const dates = (report.days || []).map((day) => day.day_date).sort();
+  const dates = (report.days || [])
+    .map((day) => day.day_date)
+    .sort();
   return dates[0] || report.report_date;
 };
 
 const getReportEnd = (report: ServiceReport) => {
   if (report.end_date) return report.end_date;
-  const dates = (report.days || []).map((day) => day.day_date).sort();
+  const dates = (report.days || [])
+    .map((day) => day.day_date)
+    .sort();
   return dates[dates.length - 1] || report.report_date;
 };
 
 const getClientName = (report: ServiceReport) =>
-  report.client_name || report.job?.title || "Cliente não indicado";
+  report.client_name ||
+  report.job?.title ||
+  "Cliente não indicado";
 
 const escapeHtml = (value?: string | null) =>
   String(value || "—")
@@ -170,7 +178,9 @@ function downloadServiceReportDoc(report: ServiceReport) {
     </body>
     </html>`;
 
-  const blob = new Blob(["\ufeff", html], { type: "application/msword" });
+  const blob = new Blob(["\ufeff", html], {
+    type: "application/msword",
+  });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -190,11 +200,13 @@ export function ServiceReportsPage() {
   const [filters, setFilters] = useState({
     search: "",
     status: "todos" as "terminado" | "por_terminar" | "todos",
-    serviceType: "todos" as "avaria" | "preventiva" | "garantia" | "todos",
+    serviceType: "todos" as
+      "avaria" | "preventiva" | "garantia" | "todos",
   });
   const [searchInput, setSearchInput] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
-  const [editingReport, setEditingReport] = useState<ServiceReport | null>(null);
+  const [editingReport, setEditingReport] =
+    useState<ServiceReport | null>(null);
 
   const canCreate =
     currentUser?.role === "administrador" ||
@@ -202,7 +214,9 @@ export function ServiceReportsPage() {
     currentUser?.role === "chefe_producao";
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hasActiveFilters =
-    filters.search !== "" || filters.status !== "todos" || filters.serviceType !== "todos";
+    filters.search !== "" ||
+    filters.status !== "todos" ||
+    filters.serviceType !== "todos";
 
   useEffect(() => {
     loadPage();
@@ -210,7 +224,8 @@ export function ServiceReportsPage() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      if (searchInput.trim() !== filters.search) changeFilter({ search: searchInput.trim() });
+      if (searchInput.trim() !== filters.search)
+        changeFilter({ search: searchInput.trim() });
     }, 300);
     return () => window.clearTimeout(timer);
   }, [searchInput]);
@@ -218,11 +233,21 @@ export function ServiceReportsPage() {
   const loadPage = async () => {
     setLoading(true);
     try {
-      const result = await serviceReportsAPI.getPage(page, PAGE_SIZE, {
-        search: filters.search || undefined,
-        status: filters.status !== "todos" ? filters.status : undefined,
-        serviceType: filters.serviceType !== "todos" ? filters.serviceType : undefined,
-      });
+      const result = await serviceReportsAPI.getPage(
+        page,
+        PAGE_SIZE,
+        {
+          search: filters.search || undefined,
+          status:
+            filters.status !== "todos"
+              ? filters.status
+              : undefined,
+          serviceType:
+            filters.serviceType !== "todos"
+              ? filters.serviceType
+              : undefined,
+        },
+      );
       setReports(result.reports);
       setTotal(result.total);
     } catch (error) {
@@ -239,12 +264,21 @@ export function ServiceReportsPage() {
 
   const clearFilters = () => {
     setSearchInput("");
-    setFilters({ search: "", status: "todos", serviceType: "todos" });
+    setFilters({
+      search: "",
+      status: "todos",
+      serviceType: "todos",
+    });
     setPage(1);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Eliminar este relatório de assistência e o documento associado?")) return;
+    if (
+      !confirm(
+        "Eliminar este relatório de assistência e o documento associado?",
+      )
+    )
+      return;
     try {
       await serviceReportsAPI.delete(id);
       await loadPage();
@@ -254,20 +288,24 @@ export function ServiceReportsPage() {
     }
   };
 
-  const firstShown = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const firstShown =
+    total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const lastShown = Math.min(page * PAGE_SIZE, total);
 
   return (
     <div className="mx-auto max-w-7xl space-y-7">
       <header className="flex flex-col gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-red-600">ASSISTÊNCIA TÉCNICA</p>
+          <p className="text-xs font-semibold tracking-[0.14em] text-red-600">
+            ASSISTÊNCIA TÉCNICA
+          </p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
             Relatórios de Assistências
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
-            Registe o cliente, o período da assistência e o que foi gasto. Se anexar um documento,
-            só precisa de indicar o cliente e as datas.
+            Registe o cliente, o período da assistência e o que
+            foi gasto. Se anexar um documento, só precisa de
+            indicar o cliente e as datas.
           </p>
         </div>
         {canCreate && (
@@ -279,14 +317,21 @@ export function ServiceReportsPage() {
             }}
           >
             <DialogTrigger asChild>
-              <Button className="h-10 bg-red-600 text-white hover:bg-red-700" onClick={() => setEditingReport(null)}>
+              <Button
+                className="h-10 bg-red-600 text-white hover:bg-red-700"
+                onClick={() => setEditingReport(null)}
+              >
                 <Plus className="mr-2 h-4 w-4" />
                 Nova assistência
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+            <DialogContent className="max-h-[90vh] !max-w-6xl overflow-y-auto">
               <DialogHeader>
-                <DialogTitle>{editingReport ? "Editar assistência" : "Registar assistência"}</DialogTitle>
+                <DialogTitle>
+                  {editingReport
+                    ? "Editar assistência"
+                    : "Registar assistência"}
+                </DialogTitle>
               </DialogHeader>
               <ServiceReportForm
                 report={editingReport}
@@ -308,7 +353,9 @@ export function ServiceReportsPage() {
               <button
                 key={option.value}
                 type="button"
-                onClick={() => changeFilter({ status: option.value })}
+                onClick={() =>
+                  changeFilter({ status: option.value })
+                }
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   filters.status === option.value
                     ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
@@ -324,23 +371,37 @@ export function ServiceReportsPage() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
               <Input
                 value={searchInput}
-                onChange={(event) => setSearchInput(event.target.value)}
+                onChange={(event) =>
+                  setSearchInput(event.target.value)
+                }
                 placeholder="Pesquisar por cliente ou número"
                 className="pl-9"
               />
             </div>
             <select
               value={filters.serviceType}
-              onChange={(event) => changeFilter({ serviceType: event.target.value as typeof filters.serviceType })}
+              onChange={(event) =>
+                changeFilter({
+                  serviceType: event.target
+                    .value as typeof filters.serviceType,
+                })
+              }
               className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
             >
               <option value="todos">Todos os tipos</option>
               {SERVICE_TYPES.map((type) => (
-                <option key={type.value} value={type.value}>{type.label}</option>
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
               ))}
             </select>
             {hasActiveFilters && (
-              <Button type="button" variant="ghost" onClick={clearFilters} className="h-9 text-zinc-500">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={clearFilters}
+                className="h-9 text-zinc-500"
+              >
                 <X className="mr-1.5 h-4 w-4" /> Limpar
               </Button>
             )}
@@ -349,7 +410,8 @@ export function ServiceReportsPage() {
 
         {loading ? (
           <div className="flex min-h-48 items-center justify-center text-sm text-zinc-400">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> A carregar assistências…
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> A
+            carregar assistências…
           </div>
         ) : reports.length ? (
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -363,7 +425,9 @@ export function ServiceReportsPage() {
                   setCreateOpen(true);
                 }}
                 onDelete={() => handleDelete(report.id)}
-                onDownload={() => downloadServiceReportDoc(report)}
+                onDownload={() =>
+                  downloadServiceReportDoc(report)
+                }
               />
             ))}
           </div>
@@ -371,21 +435,47 @@ export function ServiceReportsPage() {
           <div className="flex min-h-48 flex-col items-center justify-center px-5 text-center">
             <FileText className="h-7 w-7 text-zinc-300" />
             <p className="mt-3 text-sm text-zinc-400">
-              {hasActiveFilters ? "Nenhuma assistência corresponde aos filtros." : "Ainda não existem assistências registadas."}
+              {hasActiveFilters
+                ? "Nenhuma assistência corresponde aos filtros."
+                : "Ainda não existem assistências registadas."}
             </p>
           </div>
         )}
 
         {total > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 px-5 py-3 dark:border-zinc-800">
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">{firstShown}–{lastShown} de {total}</p>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              {firstShown}–{lastShown} de {total}
+            </p>
             <div className="flex items-center gap-1">
-              <Button type="button" variant="outline" size="sm" className="h-8" disabled={page <= 1 || loading} onClick={() => setPage((current) => current - 1)}>
-                <ChevronLeft className="mr-1 h-4 w-4" /> Anterior
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={page <= 1 || loading}
+                onClick={() =>
+                  setPage((current) => current - 1)
+                }
+              >
+                <ChevronLeft className="mr-1 h-4 w-4" />{" "}
+                Anterior
               </Button>
-              <span className="px-3 text-xs text-zinc-500 dark:text-zinc-400">Página {page} de {totalPages}</span>
-              <Button type="button" variant="outline" size="sm" className="h-8" disabled={page >= totalPages || loading} onClick={() => setPage((current) => current + 1)}>
-                Seguinte <ChevronRight className="ml-1 h-4 w-4" />
+              <span className="px-3 text-xs text-zinc-500 dark:text-zinc-400">
+                Página {page} de {totalPages}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8"
+                disabled={page >= totalPages || loading}
+                onClick={() =>
+                  setPage((current) => current + 1)
+                }
+              >
+                Seguinte{" "}
+                <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -408,7 +498,11 @@ function ReportRow({
   onDelete: () => void;
   onDownload: () => void;
 }) {
-  const serviceTypeLabels = { avaria: "Avaria", preventiva: "Preventiva", garantia: "Garantia" };
+  const serviceTypeLabels = {
+    avaria: "Avaria",
+    preventiva: "Preventiva",
+    garantia: "Garantia",
+  };
   return (
     <div className="p-5">
       <div className="flex gap-3">
@@ -418,43 +512,89 @@ function ReportRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="font-medium text-zinc-800 dark:text-zinc-100">{getClientName(report)}</p>
-              <p className="mt-1 font-mono text-xs text-zinc-400">{report.service_number}</p>
+              <p className="font-medium text-zinc-800 dark:text-zinc-100">
+                {getClientName(report)}
+              </p>
+              <p className="mt-1 font-mono text-xs text-zinc-400">
+                {report.service_number}
+              </p>
               {report.job && (
                 <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                  Serviço: <span className="font-mono">{report.job.reference}</span>
-                  {report.job.title ? ` · ${report.job.title}` : ""}
+                  Serviço:{" "}
+                  <span className="font-mono">
+                    {report.job.reference}
+                  </span>
+                  {report.job.title
+                    ? ` · ${report.job.title}`
+                    : ""}
                 </p>
               )}
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               {report.document_url && (
                 <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400">
-                  <Paperclip className="mr-1 h-3 w-3" /> Documento
+                  <Paperclip className="mr-1 h-3 w-3" />{" "}
+                  Documento
                 </Badge>
               )}
               <Badge className="border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
                 {serviceTypeLabels[report.service_type]}
               </Badge>
-              <Badge className={report.status === "terminado" ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400" : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400"}>
-                {report.status === "terminado" ? "Terminado" : "Por terminar"}
+              <Badge
+                className={
+                  report.status === "terminado"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400"
+                    : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400"
+                }
+              >
+                {report.status === "terminado"
+                  ? "Terminado"
+                  : "Por terminar"}
               </Badge>
               {report.document_url && (
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-400" asChild>
-                  <a href={report.document_url} target="_blank" rel="noreferrer" aria-label="Abrir documento anexado">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-zinc-400"
+                  asChild
+                >
+                  <a
+                    href={report.document_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Abrir documento anexado"
+                  >
                     <ExternalLink className="h-3.5 w-3.5" />
                   </a>
                 </Button>
               )}
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-400" onClick={onDownload} aria-label="Exportar para Word">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-zinc-400"
+                onClick={onDownload}
+                aria-label="Exportar para Word"
+              >
                 <Download className="h-3.5 w-3.5" />
               </Button>
               {canEdit && (
                 <>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-400" onClick={onEdit} aria-label="Editar assistência">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-zinc-400"
+                    onClick={onEdit}
+                    aria-label="Editar assistência"
+                  >
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-zinc-400 hover:bg-red-50 hover:text-red-600" onClick={onDelete} aria-label="Eliminar assistência">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-zinc-400 hover:bg-red-50 hover:text-red-600"
+                    onClick={onDelete}
+                    aria-label="Eliminar assistência"
+                  >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </>
@@ -464,10 +604,13 @@ function ReportRow({
           <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-zinc-500 dark:text-zinc-400">
             <span className="flex items-center gap-1.5 font-medium text-zinc-700 dark:text-zinc-300">
               <CalendarRange className="h-3.5 w-3.5 text-red-500" />
-              {formatDate(getReportStart(report))} — {formatDate(getReportEnd(report))}
+              {formatDate(getReportStart(report))} —{" "}
+              {formatDate(getReportEnd(report))}
             </span>
             {!report.document_url && report.expenses_text && (
-              <span className="line-clamp-1 max-w-xl">Gasto: {report.expenses_text}</span>
+              <span className="line-clamp-1 max-w-xl">
+                Gasto: {report.expenses_text}
+              </span>
             )}
           </div>
         </div>
@@ -487,21 +630,31 @@ function ServiceReportForm({
 }) {
   const [saving, setSaving] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [removeExistingDocument, setRemoveExistingDocument] = useState(false);
+  const [removeExistingDocument, setRemoveExistingDocument] =
+    useState(false);
   const [form, setForm] = useState({
     jobId: report?.job_id || "",
     clientName: report ? getClientName(report) : "",
-    startDate: report ? toDateInput(getReportStart(report)) : toDateInput(),
-    endDate: report ? toDateInput(getReportEnd(report)) : toDateInput(),
-    serviceType: report?.service_type || ("avaria" as "avaria" | "preventiva" | "garantia"),
+    startDate: report
+      ? toDateInput(getReportStart(report))
+      : toDateInput(),
+    endDate: report
+      ? toDateInput(getReportEnd(report))
+      : toDateInput(),
+    serviceType:
+      report?.service_type ||
+      ("avaria" as "avaria" | "preventiva" | "garantia"),
     expensesText: report?.expenses_text || "",
     anomalies: report?.anomalies || "",
     workPerformed: report?.work_performed || "",
     observations: report?.observations || "",
-    status: report?.status || ("por_terminar" as "terminado" | "por_terminar"),
+    status:
+      report?.status ||
+      ("por_terminar" as "terminado" | "por_terminar"),
   });
 
-  const hasExistingDocument = Boolean(report?.document_url) && !removeExistingDocument;
+  const hasExistingDocument =
+    Boolean(report?.document_url) && !removeExistingDocument;
   const hasDocument = Boolean(file) || hasExistingDocument;
   const update = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
@@ -518,11 +671,20 @@ function ServiceReportForm({
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (form.endDate < form.startDate) {
-      alert("A data final não pode ser anterior à data inicial.");
+      alert(
+        "A data final não pode ser anterior à data inicial.",
+      );
       return;
     }
-    if (!hasDocument && (!form.expensesText.trim() || !form.anomalies.trim() || !form.workPerformed.trim())) {
-      alert("Sem documento anexado, preencha o que foi gasto, as anomalias e os trabalhos realizados.");
+    if (
+      !hasDocument &&
+      (!form.expensesText.trim() ||
+        !form.anomalies.trim() ||
+        !form.workPerformed.trim())
+    ) {
+      alert(
+        "Sem documento anexado, preencha o que foi gasto, as anomalias e os trabalhos realizados.",
+      );
       return;
     }
 
@@ -530,9 +692,15 @@ function ServiceReportForm({
     const payload = {
       jobId: form.jobId || undefined,
       clientName: form.clientName,
-      startDate: new Date(`${form.startDate}T12:00:00`).toISOString(),
-      endDate: new Date(`${form.endDate}T12:00:00`).toISOString(),
-      reportDate: new Date(`${form.endDate}T12:00:00`).toISOString(),
+      startDate: new Date(
+        `${form.startDate}T12:00:00`,
+      ).toISOString(),
+      endDate: new Date(
+        `${form.endDate}T12:00:00`,
+      ).toISOString(),
+      reportDate: new Date(
+        `${form.endDate}T12:00:00`,
+      ).toISOString(),
       serviceType: form.serviceType,
       expensesText: form.expensesText,
       anomalies: form.anomalies,
@@ -557,7 +725,10 @@ function ServiceReportForm({
       onClose();
     } catch (error: any) {
       console.error("Erro ao guardar assistência:", error);
-      alert(error?.message || "Não foi possível guardar a assistência.");
+      alert(
+        error?.message ||
+          "Não foi possível guardar a assistência.",
+      );
     } finally {
       setSaving(false);
     }
@@ -571,24 +742,44 @@ function ServiceReportForm({
           <Input
             id="clientName"
             value={form.clientName}
-            onChange={(event) => update("clientName", event.target.value)}
+            onChange={(event) =>
+              update("clientName", event.target.value)
+            }
             placeholder="Nome do cliente"
             required
           />
         </div>
         <div className="space-y-2">
           <Label htmlFor="startDate">Assistência de *</Label>
-          <Input id="startDate" type="date" value={form.startDate} onChange={(event) => update("startDate", event.target.value)} required />
+          <Input
+            id="startDate"
+            type="date"
+            value={form.startDate}
+            onChange={(event) =>
+              update("startDate", event.target.value)
+            }
+            required
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="endDate">Até *</Label>
-          <Input id="endDate" type="date" min={form.startDate} value={form.endDate} onChange={(event) => update("endDate", event.target.value)} required />
+          <Input
+            id="endDate"
+            type="date"
+            min={form.startDate}
+            value={form.endDate}
+            onChange={(event) =>
+              update("endDate", event.target.value)
+            }
+            required
+          />
         </div>
         <div className="space-y-2 sm:col-span-2">
           <div>
             <Label>Serviço / Job</Label>
             <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-              Facultativo — pode associar a PROD, PROD_INT ou outro tipo de job.
+              Facultativo — pode associar a PROD, PROD_INT ou
+              outro tipo de job.
             </p>
           </div>
           <JobSearchPicker
@@ -599,22 +790,46 @@ function ServiceReportForm({
         </div>
       </section>
 
-      <section className={`rounded-xl border p-4 transition-colors ${hasDocument ? "border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20" : "border-dashed border-zinc-300 dark:border-zinc-700"}`}>
+      <section
+        className={`rounded-xl border p-4 transition-colors ${hasDocument ? "border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20" : "border-dashed border-zinc-300 dark:border-zinc-700"}`}
+      >
         <div className="flex items-start gap-3">
-          <div className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${hasDocument ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300" : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"}`}>
-            {hasDocument ? <FileCheck2 className="h-5 w-5" /> : <UploadCloud className="h-5 w-5" />}
+          <div
+            className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${hasDocument ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300" : "bg-zinc-100 text-zinc-500 dark:bg-zinc-800"}`}
+          >
+            {hasDocument ? (
+              <FileCheck2 className="h-5 w-5" />
+            ) : (
+              <UploadCloud className="h-5 w-5" />
+            )}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">Documento da assistência</p>
+            <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">
+              Documento da assistência
+            </p>
             <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-zinc-400">
-              Com documento, os detalhes técnicos deixam de ser obrigatórios. Aceita PDF, Word, Excel e imagens até 15 MB.
+              Com documento, os detalhes técnicos deixam de ser
+              obrigatórios. Aceita PDF, Word, Excel e imagens
+              até 15 MB.
             </p>
             {hasExistingDocument && !file && (
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                <a href={report?.document_url || "#"} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 font-medium text-emerald-700 hover:underline dark:text-emerald-400">
-                  <Paperclip className="h-3.5 w-3.5" /> {report?.document_name || "Documento atual"}
+                <a
+                  href={report?.document_url || "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-1.5 font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+                >
+                  <Paperclip className="h-3.5 w-3.5" />{" "}
+                  {report?.document_name || "Documento atual"}
                 </a>
-                <button type="button" onClick={() => setRemoveExistingDocument(true)} className="text-zinc-500 underline-offset-2 hover:text-red-600 hover:underline">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setRemoveExistingDocument(true)
+                  }
+                  className="text-zinc-500 underline-offset-2 hover:text-red-600 hover:underline"
+                >
                   Remover
                 </button>
               </div>
@@ -623,17 +838,26 @@ function ServiceReportForm({
               <div className="mt-3 flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-400">
                 <Paperclip className="h-3.5 w-3.5" />
                 <span className="truncate">{file.name}</span>
-                <button type="button" onClick={() => setFile(null)} className="ml-auto text-zinc-500 hover:text-red-600">Remover</button>
+                <button
+                  type="button"
+                  onClick={() => setFile(null)}
+                  className="ml-auto text-zinc-500 hover:text-red-600"
+                >
+                  Remover
+                </button>
               </div>
             )}
             {!hasDocument && (
               <label className="mt-3 inline-flex h-9 cursor-pointer items-center rounded-md border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800">
-                <UploadCloud className="mr-2 h-4 w-4" /> Escolher documento
+                <UploadCloud className="mr-2 h-4 w-4" />{" "}
+                Escolher documento
                 <input
                   type="file"
                   className="sr-only"
                   accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp"
-                  onChange={(event) => selectFile(event.target.files?.[0] || null)}
+                  onChange={(event) =>
+                    selectFile(event.target.files?.[0] || null)
+                  }
                 />
               </label>
             )}
@@ -644,55 +868,131 @@ function ServiceReportForm({
       {!hasDocument && (
         <section className="grid gap-5 border-l-2 border-red-500 pl-4">
           <div>
-            <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Detalhes da assistência</p>
-            <p className="mt-1 text-xs text-zinc-500">Obrigatórios porque não existe um documento anexado.</p>
+            <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+              Detalhes da assistência
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Obrigatórios porque não existe um documento
+              anexado.
+            </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="serviceType">Tipo de assistência</Label>
-              <select id="serviceType" value={form.serviceType} onChange={(event) => update("serviceType", event.target.value)} className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
-                {SERVICE_TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}
+              <Label htmlFor="serviceType">
+                Tipo de assistência
+              </Label>
+              <select
+                id="serviceType"
+                value={form.serviceType}
+                onChange={(event) =>
+                  update("serviceType", event.target.value)
+                }
+                className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              >
+                {SERVICE_TYPES.map((type) => (
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="status">Estado</Label>
-              <select id="status" value={form.status} onChange={(event) => update("status", event.target.value)} className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200">
-                <option value="por_terminar">Por terminar</option>
+              <select
+                id="status"
+                value={form.status}
+                onChange={(event) =>
+                  update("status", event.target.value)
+                }
+                className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+              >
+                <option value="por_terminar">
+                  Por terminar
+                </option>
                 <option value="terminado">Terminado</option>
               </select>
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="expensesText">O que foi gasto? *</Label>
+            <Label htmlFor="expensesText">
+              O que foi gasto? *
+            </Label>
             <Textarea
               id="expensesText"
               value={form.expensesText}
-              onChange={(event) => update("expensesText", event.target.value)}
+              onChange={(event) =>
+                update("expensesText", event.target.value)
+              }
               placeholder="Escreva por extenso, por exemplo: dois litros de óleo hidráulico, três vedantes e material de limpeza. Não altera o stock."
               className="min-h-24"
               required={!hasDocument}
             />
-            <p className="text-xs text-zinc-400">Este texto é apenas informativo e não está ligado ao stock.</p>
+            <p className="text-xs text-zinc-400">
+              Este texto é apenas informativo e não está ligado
+              ao stock.
+            </p>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="anomalies">Anomalias verificadas *</Label>
-            <Textarea id="anomalies" value={form.anomalies} onChange={(event) => update("anomalies", event.target.value)} placeholder="Descreva as anomalias encontradas..." className="min-h-20" required={!hasDocument} />
+            <Label htmlFor="anomalies">
+              Anomalias verificadas *
+            </Label>
+            <Textarea
+              id="anomalies"
+              value={form.anomalies}
+              onChange={(event) =>
+                update("anomalies", event.target.value)
+              }
+              placeholder="Descreva as anomalias encontradas..."
+              className="min-h-20"
+              required={!hasDocument}
+            />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="workPerformed">Trabalhos realizados *</Label>
-            <Textarea id="workPerformed" value={form.workPerformed} onChange={(event) => update("workPerformed", event.target.value)} placeholder="Descreva os trabalhos executados..." className="min-h-20" required={!hasDocument} />
+            <Label htmlFor="workPerformed">
+              Trabalhos realizados *
+            </Label>
+            <Textarea
+              id="workPerformed"
+              value={form.workPerformed}
+              onChange={(event) =>
+                update("workPerformed", event.target.value)
+              }
+              placeholder="Descreva os trabalhos executados..."
+              className="min-h-20"
+              required={!hasDocument}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="observations">Observações</Label>
-            <Textarea id="observations" value={form.observations} onChange={(event) => update("observations", event.target.value)} placeholder="Observações adicionais..." className="min-h-16" />
+            <Textarea
+              id="observations"
+              value={form.observations}
+              onChange={(event) =>
+                update("observations", event.target.value)
+              }
+              placeholder="Observações adicionais..."
+              className="min-h-16"
+            />
           </div>
         </section>
       )}
 
       <div className="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-        <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-        <Button type="submit" className="bg-red-600 text-white hover:bg-red-700" disabled={saving}>
-          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onClose}
+        >
+          Cancelar
+        </Button>
+        <Button
+          type="submit"
+          className="bg-red-600 text-white hover:bg-red-700"
+          disabled={saving}
+        >
+          {saving && (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          )}
           {report ? "Guardar alterações" : "Criar assistência"}
         </Button>
       </div>

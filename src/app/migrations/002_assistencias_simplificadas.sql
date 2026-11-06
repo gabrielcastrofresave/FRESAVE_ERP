@@ -62,3 +62,6 @@ CREATE POLICY "service_documents_delete"
 ON storage.objects FOR DELETE
 TO anon, authenticated
 USING (bucket_id = 'service-documents');
+
+-- Força o PostgREST/Supabase a reconhecer imediatamente as novas colunas.
+NOTIFY pgrst, 'reload schema';
