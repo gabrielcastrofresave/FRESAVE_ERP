@@ -2001,13 +2001,20 @@ export const schedulesAPI = {
 
 export interface ServiceReport {
   id: string;
-  job_id: string;
+  job_id: string | null;
   service_number: string;
   report_date: string;
   service_type: 'avaria' | 'preventiva' | 'garantia';
+  client_name: string;
+  start_date: string;
+  end_date: string;
+  expenses_text: string;
   anomalies: string;
   work_performed: string;
   observations: string;
+  document_name: string | null;
+  document_url: string | null;
+  document_path: string | null;
   status: 'terminado' | 'por_terminar';
   created_at: string;
   updated_at: string;
@@ -2060,7 +2067,12 @@ export const serviceReportsAPI = {
       `, { count: 'exact' });
 
     if (filters?.search) {
-      query = query.or(`service_number.ilike.%${filters.search}%,observations.ilike.%${filters.search}%`);
+      const search = filters.search.replace(/[,()%*\\]/g, ' ').trim();
+      if (search) {
+        query = query.or(
+          `service_number.ilike.%${search}%,client_name.ilike.%${search}%,observations.ilike.%${search}%`
+        );
+      }
     }
 
     if (filters?.status && filters.status !== 'todos') {
@@ -2103,7 +2115,11 @@ export const serviceReportsAPI = {
   },
 
   async create(report: {
-    jobId: string;
+    jobId?: string;
+    clientName: string;
+    startDate: string;
+    endDate: string;
+    expensesText: string;
     serviceType: 'avaria' | 'preventiva' | 'garantia';
     reportDate: string;
     anomalies: string;
@@ -2118,6 +2134,7 @@ export const serviceReportsAPI = {
       accommodation: string;
       materials: string;
     }>;
+    document?: File | null;
   }): Promise<ServiceReport> {
     // Gera número do relatório (formato: AT-YYYY-NNN)
     const year = new Date(report.reportDate).getFullYear();
@@ -2132,9 +2149,13 @@ export const serviceReportsAPI = {
     const { data: reportData, error: reportError } = await supabase
       .from('service_reports')
       .insert({
-        job_id: report.jobId,
+        job_id: report.jobId || null,
         service_number: serviceNumber,
         report_date: report.reportDate,
+        client_name: report.clientName.trim(),
+        start_date: report.startDate,
+        end_date: report.endDate,
+        expenses_text: report.expensesText.trim(),
         service_type: report.serviceType,
         anomalies: report.anomalies,
         work_performed: report.workPerformed,
@@ -2145,6 +2166,10 @@ export const serviceReportsAPI = {
       .single();
 
     if (reportError) throw reportError;
+
+    if (report.document) {
+      await this.uploadDocument(reportData.id, report.document);
+    }
 
     // Insere os dias
     if (report.days.length > 0) {
@@ -2171,12 +2196,19 @@ export const serviceReportsAPI = {
   async update(
     id: string,
     updates: {
+      jobId?: string | null;
       serviceType?: 'avaria' | 'preventiva' | 'garantia';
       reportDate?: string;
+      clientName?: string;
+      startDate?: string;
+      endDate?: string;
+      expensesText?: string;
       anomalies?: string;
       workPerformed?: string;
       observations?: string;
       status?: 'terminado' | 'por_terminar';
+      document?: File | null;
+      removeDocument?: boolean;
       days?: Array<{
         id?: string;
         dayDate: string;
@@ -2188,19 +2220,32 @@ export const serviceReportsAPI = {
       }>;
     }
   ): Promise<ServiceReport> {
+    const payload: Record<string, unknown> = {};
+    if (updates.jobId !== undefined) payload.job_id = updates.jobId || null;
+    if (updates.serviceType !== undefined) payload.service_type = updates.serviceType;
+    if (updates.reportDate !== undefined) payload.report_date = updates.reportDate;
+    if (updates.clientName !== undefined) payload.client_name = updates.clientName.trim();
+    if (updates.startDate !== undefined) payload.start_date = updates.startDate;
+    if (updates.endDate !== undefined) payload.end_date = updates.endDate;
+    if (updates.expensesText !== undefined) payload.expenses_text = updates.expensesText.trim();
+    if (updates.anomalies !== undefined) payload.anomalies = updates.anomalies;
+    if (updates.workPerformed !== undefined) payload.work_performed = updates.workPerformed;
+    if (updates.observations !== undefined) payload.observations = updates.observations;
+    if (updates.status !== undefined) payload.status = updates.status;
+
     const { error: reportError } = await supabase
       .from('service_reports')
-      .update({
-        service_type: updates.serviceType,
-        report_date: updates.reportDate,
-        anomalies: updates.anomalies,
-        work_performed: updates.workPerformed,
-        observations: updates.observations,
-        status: updates.status
-      })
+      .update(payload)
       .eq('id', id);
 
     if (reportError) throw reportError;
+
+    if (updates.removeDocument || updates.document) {
+      await this.removeDocument(id);
+    }
+    if (updates.document) {
+      await this.uploadDocument(id, updates.document);
+    }
 
     // Atualiza os dias se fornecidos
     if (updates.days) {
@@ -2234,11 +2279,79 @@ export const serviceReportsAPI = {
   },
 
   async delete(id: string): Promise<void> {
+    await this.removeDocument(id);
     const { error } = await supabase
       .from('service_reports')
       .delete()
       .eq('id', id);
 
     if (error) throw error;
+  },
+
+  async uploadDocument(reportId: string, file: File): Promise<void> {
+    const extension = file.name.includes('.')
+      ? `.${file.name.split('.').pop()?.toLowerCase()}`
+      : '';
+    const safeName = file.name
+      .replace(/\.[^/.]+$/, '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9_-]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 70) || 'documento';
+    const path = `${reportId}/${Date.now()}-${safeName}${extension}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('service-documents')
+      .upload(path, file, {
+        cacheControl: '3600',
+        upsert: false,
+        contentType: file.type || undefined,
+      });
+    if (uploadError) throw uploadError;
+
+    const { data: publicData } = supabase.storage
+      .from('service-documents')
+      .getPublicUrl(path);
+
+    const { error: updateError } = await supabase
+      .from('service_reports')
+      .update({
+        document_name: file.name,
+        document_path: path,
+        document_url: publicData.publicUrl,
+      })
+      .eq('id', reportId);
+
+    if (updateError) {
+      await supabase.storage.from('service-documents').remove([path]);
+      throw updateError;
+    }
+  },
+
+  async removeDocument(reportId: string): Promise<void> {
+    const { data, error } = await supabase
+      .from('service_reports')
+      .select('document_path')
+      .eq('id', reportId)
+      .maybeSingle();
+    if (error) throw error;
+
+    if (data?.document_path) {
+      const { error: storageError } = await supabase.storage
+        .from('service-documents')
+        .remove([data.document_path]);
+      if (storageError) throw storageError;
+    }
+
+    const { error: clearError } = await supabase
+      .from('service_reports')
+      .update({
+        document_name: null,
+        document_path: null,
+        document_url: null,
+      })
+      .eq('id', reportId);
+    if (clearError) throw clearError;
   }
 };
