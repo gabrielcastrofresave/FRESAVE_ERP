@@ -1997,3 +1997,248 @@ export const schedulesAPI = {
     return data ?? [];
   },
 };
+// src/app/api.ts - adiciona ao final do ficheiro existente
+
+export interface ServiceReport {
+  id: string;
+  job_id: string;
+  service_number: string;
+  report_date: string;
+  service_type: 'avaria' | 'preventiva' | 'garantia';
+  anomalies: string;
+  work_performed: string;
+  observations: string;
+  status: 'terminado' | 'por_terminar';
+  created_at: string;
+  updated_at: string;
+  days: ServiceDay[];
+  job?: any;
+}
+
+export interface ServiceDay {
+  id: string;
+  report_id: string;
+  day_date: string;
+  travel_hours: number;
+  presence_hours: number;
+  kms: number;
+  accommodation: string;
+  materials: string;
+}
+
+export const serviceReportsAPI = {
+  async getAll(): Promise<ServiceReport[]> {
+    const { data, error } = await supabase
+      .from('service_reports')
+      .select(`
+        *,
+        days:service_days(*),
+        job:jobs(*)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  async getPage(
+    page: number,
+    pageSize: number,
+    filters?: {
+      search?: string;
+      status?: 'terminado' | 'por_terminar' | 'todos';
+      serviceType?: 'avaria' | 'preventiva' | 'garantia' | 'todos';
+      jobId?: string;
+    }
+  ) {
+    let query = supabase
+      .from('service_reports')
+      .select(`
+        *,
+        days:service_days(*),
+        job:jobs(*)
+      `, { count: 'exact' });
+
+    if (filters?.search) {
+      query = query.or(`service_number.ilike.%${filters.search}%,observations.ilike.%${filters.search}%`);
+    }
+
+    if (filters?.status && filters.status !== 'todos') {
+      query = query.eq('status', filters.status);
+    }
+
+    if (filters?.serviceType && filters.serviceType !== 'todos') {
+      query = query.eq('service_type', filters.serviceType);
+    }
+
+    if (filters?.jobId) {
+      query = query.eq('job_id', filters.jobId);
+    }
+
+    const { data, error, count } = await query
+      .order('created_at', { ascending: false })
+      .range((page - 1) * pageSize, page * pageSize - 1);
+
+    if (error) throw error;
+
+    return {
+      reports: data || [],
+      total: count || 0
+    };
+  },
+
+  async getById(id: string): Promise<ServiceReport | null> {
+    const { data, error } = await supabase
+      .from('service_reports')
+      .select(`
+        *,
+        days:service_days(*),
+        job:jobs(*)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error) throw error;
+    return data;
+  },
+
+  async create(report: {
+    jobId: string;
+    serviceType: 'avaria' | 'preventiva' | 'garantia';
+    reportDate: string;
+    anomalies: string;
+    workPerformed: string;
+    observations: string;
+    status: 'terminado' | 'por_terminar';
+    days: Array<{
+      dayDate: string;
+      travelHours: number;
+      presenceHours: number;
+      kms: number;
+      accommodation: string;
+      materials: string;
+    }>;
+  }): Promise<ServiceReport> {
+    // Gera número do relatório (formato: AT-YYYY-NNN)
+    const year = new Date(report.reportDate).getFullYear();
+    const { count } = await supabase
+      .from('service_reports')
+      .select('*', { count: 'exact', head: true })
+      .gte('report_date', `${year}-01-01`)
+      .lt('report_date', `${year + 1}-01-01`);
+
+    const serviceNumber = `AT-${year}-${String((count || 0) + 1).padStart(3, '0')}`;
+
+    const { data: reportData, error: reportError } = await supabase
+      .from('service_reports')
+      .insert({
+        job_id: report.jobId,
+        service_number: serviceNumber,
+        report_date: report.reportDate,
+        service_type: report.serviceType,
+        anomalies: report.anomalies,
+        work_performed: report.workPerformed,
+        observations: report.observations,
+        status: report.status
+      })
+      .select()
+      .single();
+
+    if (reportError) throw reportError;
+
+    // Insere os dias
+    if (report.days.length > 0) {
+      const { error: daysError } = await supabase
+        .from('service_days')
+        .insert(
+          report.days.map(day => ({
+            report_id: reportData.id,
+            day_date: day.dayDate,
+            travel_hours: day.travelHours,
+            presence_hours: day.presenceHours,
+            kms: day.kms,
+            accommodation: day.accommodation,
+            materials: day.materials
+          }))
+        );
+
+      if (daysError) throw daysError;
+    }
+
+    return await this.getById(reportData.id) as ServiceReport;
+  },
+
+  async update(
+    id: string,
+    updates: {
+      serviceType?: 'avaria' | 'preventiva' | 'garantia';
+      reportDate?: string;
+      anomalies?: string;
+      workPerformed?: string;
+      observations?: string;
+      status?: 'terminado' | 'por_terminar';
+      days?: Array<{
+        id?: string;
+        dayDate: string;
+        travelHours: number;
+        presenceHours: number;
+        kms: number;
+        accommodation: string;
+        materials: string;
+      }>;
+    }
+  ): Promise<ServiceReport> {
+    const { error: reportError } = await supabase
+      .from('service_reports')
+      .update({
+        service_type: updates.serviceType,
+        report_date: updates.reportDate,
+        anomalies: updates.anomalies,
+        work_performed: updates.workPerformed,
+        observations: updates.observations,
+        status: updates.status
+      })
+      .eq('id', id);
+
+    if (reportError) throw reportError;
+
+    // Atualiza os dias se fornecidos
+    if (updates.days) {
+      // Remove dias existentes
+      await supabase
+        .from('service_days')
+        .delete()
+        .eq('report_id', id);
+
+      // Insere novos dias
+      if (updates.days.length > 0) {
+        const { error: daysError } = await supabase
+          .from('service_days')
+          .insert(
+            updates.days.map(day => ({
+              report_id: id,
+              day_date: day.dayDate,
+              travel_hours: day.travelHours,
+              presence_hours: day.presenceHours,
+              kms: day.kms,
+              accommodation: day.accommodation,
+              materials: day.materials
+            }))
+          );
+
+        if (daysError) throw daysError;
+      }
+    }
+
+    return await this.getById(id) as ServiceReport;
+  },
+
+  async delete(id: string): Promise<void> {
+    const { error } = await supabase
+      .from('service_reports')
+      .delete()
+      .eq('id', id);
+
+    if (error) throw error;
+  }
+};

@@ -143,12 +143,17 @@ export function Layout({
         },
       ],
     },
-        {
+    {
       id: "planeamentos",
       label: "Planeamentos",
       icon: CalendarClock,
       section: "Operações",
-      roles: ["administrador", "escritorio", "projeto", "chefe_producao"],
+      roles: [
+        "administrador",
+        "escritorio",
+        "projeto",
+        "chefe_producao",
+      ],
       items: [
         {
           id: "schedules",
@@ -156,6 +161,19 @@ export function Layout({
           icon: CalendarClock,
         },
       ],
+    },
+    {
+      id: "service-reports",
+      label: "Assistências Técnicas",
+      icon: Wrench,
+      section: "Operações",
+      roles: [
+        "administrador",
+        "escritorio",
+        "projeto",
+        "chefe_producao",
+      ],
+      items: [],
     },
     {
       id: "producao",
@@ -534,7 +552,7 @@ export function Layout({
           <div className="flex items-center gap-2">
             <img
               src={image_logo_2}
-              alt="Electrominho"
+              alt="Fresave"
               className="w-6 h-6 rounded"
             />
             <span className="text-sm font-semibold">
@@ -545,7 +563,7 @@ export function Layout({
         </header>
 
         <main className="flex-1 p-4 sm:p-5 md:p-6 lg:p-7 xl:p-8 bg-[#18181b00]">
-          <div className="w-full max-w-full">{children}</div>
+          <div className="w-full max-full">{children}</div>
         </main>
       </div>
     </div>

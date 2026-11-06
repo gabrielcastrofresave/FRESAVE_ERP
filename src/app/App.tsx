@@ -13,6 +13,7 @@ import { TrackingPublicPage } from "./pages/TrackingPublicPage";
 import { UsersPage } from "./pages/UsersPage";
 import { InsurancePage } from "./pages/InsurancePage";
 import { InspectionPage } from "./pages/InspectionPage";
+import { ServiceReportsPage } from "./pages/ServiceReportsPage";
 import { OthersPage } from "./pages/OthersPage";
 import { JobsPage } from "./pages/JobsPage";
 import { SchedulesPage } from "./pages/SchedulesPage";
@@ -24,6 +25,7 @@ import { ThemeProvider } from "next-themes";
 function AppContent() {
   const { currentUser, loading } = useApp();
   const [currentPage, setCurrentPage] = useState("dashboard");
+  
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
@@ -31,9 +33,11 @@ function AppContent() {
       </div>
     );
   }
+  
   if (!currentUser) {
     return <LoginPage />;
   }
+  
   const renderPage = () => {
     switch (currentPage) {
       case "dashboard":
@@ -48,7 +52,7 @@ function AppContent() {
         return <CalendarPage />;
       case "jobs":
         return <JobsPage />;
-        case "schedules":
+      case "schedules":
         return <SchedulesPage />;
       case "contabilidade":
         return <AccountingPage />;
@@ -58,6 +62,8 @@ function AppContent() {
         return <InsurancePage />;
       case "inspection":
         return <InspectionPage />;
+      case "service-reports":
+        return <ServiceReportsPage />;
       case "users":
         return <UsersPage />;
       case "documentacao":
@@ -68,6 +74,7 @@ function AppContent() {
         return <DashboardPage />;
     }
   };
+  
   return (
     <Layout
       currentPage={currentPage}
@@ -110,4 +117,5 @@ function App() {
     </ThemeProvider>
   );
 }
+
 export default App;
