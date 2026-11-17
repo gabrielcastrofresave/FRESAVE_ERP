@@ -239,15 +239,15 @@ export function EquipmentPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-7">
       {/* Header */}
-      <header className="flex flex-col gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800 lg:flex-row lg:items-end lg:justify-between">
+      <header className="flex flex-col gap-4 border-b border-border pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-red-600">
+          <p className="text-xs font-semibold tracking-[0.14em] text-amber-600 dark:text-amber-300">
             INVENTÁRIO
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Equipamentos
           </h1>
-          <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
             Consulte, adicione e mantenha atualizado o
             inventário de equipamentos.
           </p>
@@ -260,7 +260,7 @@ export function EquipmentPage() {
             <DialogTrigger asChild>
               <Button
                 onClick={resetForm}
-                className="h-10 bg-red-600 text-white hover:bg-red-700"
+                className="h-10 bg-blue-700 text-white hover:bg-blue-800"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Novo Equipamento
@@ -420,7 +420,7 @@ export function EquipmentPage() {
                   </Button>
                   <Button
                     type="submit"
-                    className="bg-red-600 hover:bg-red-700"
+                    className="bg-blue-700 hover:bg-blue-800"
                   >
                     {editingEquipment ? "Guardar" : "Adicionar"}
                   </Button>
@@ -432,7 +432,7 @@ export function EquipmentPage() {
       </header>
 
       {/* Filtros */}
-      <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="erp-surface p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
@@ -480,9 +480,9 @@ export function EquipmentPage() {
       </section>
 
       {/* Tabela */}
-      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="overflow-hidden erp-surface">
         <div className="border-b border-zinc-100 p-4 dark:border-zinc-800">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+          <h2 className="text-lg font-semibold text-foreground">
             Lista de Equipamentos ({filtered.length})
           </h2>
         </div>
@@ -517,7 +517,7 @@ export function EquipmentPage() {
                     key={item.id}
                     className="hover:bg-zinc-50/70 dark:hover:bg-zinc-800/50"
                   >
-                    <td className="px-5 py-3 font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                    <td className="px-5 py-3 font-mono text-xs text-muted-foreground">
                       {item.identificacao || "-"}
                     </td>
                     <td
@@ -526,7 +526,7 @@ export function EquipmentPage() {
                     >
                       {item.nome}
                     </td>
-                    <td className="px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
                       {item.numeroSerie || "-"}
                     </td>
                     <td className="px-4 py-3">
@@ -539,7 +539,7 @@ export function EquipmentPage() {
                         {item.tipo || "-"}
                       </Badge>
                     </td>
-                    <td className="px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
                       {item.marca || "-"}
                     </td>
                     <td className="px-4 py-3">
@@ -580,7 +580,7 @@ export function EquipmentPage() {
 
         {/* Paginação */}
         <div className="flex flex-col gap-3 border-t border-zinc-100 p-4 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <span>Mostrar</span>
             <select
               value={itemsPerPage}
@@ -599,7 +599,7 @@ export function EquipmentPage() {
             <span>por página</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-zinc-500 dark:text-zinc-400">
+            <span className="text-sm text-muted-foreground">
               {filtered.length === 0 ? 0 : startIndex + 1}-
               {Math.min(endIndex, filtered.length)} de{" "}
               {filtered.length}
@@ -664,7 +664,7 @@ export function EquipmentPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Identificação
                   </p>
                   <p className="mt-1 font-mono text-sm text-zinc-800 dark:text-zinc-100">
@@ -673,7 +673,7 @@ export function EquipmentPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Tipo
                   </p>
                   <p className="mt-1 text-sm text-zinc-800 dark:text-zinc-100">
@@ -681,7 +681,7 @@ export function EquipmentPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Marca
                   </p>
                   <p className="mt-1 text-sm text-zinc-800 dark:text-zinc-100">
@@ -689,7 +689,7 @@ export function EquipmentPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Categoria
                   </p>
                   <p className="mt-1 text-sm text-zinc-800 dark:text-zinc-100">
@@ -697,7 +697,7 @@ export function EquipmentPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Status
                   </p>
                   <div className="mt-1">
@@ -707,7 +707,7 @@ export function EquipmentPage() {
               </div>
               {selectedEquipmentForView.observacoes && (
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Observações
                   </p>
                   <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
@@ -718,7 +718,7 @@ export function EquipmentPage() {
               <div className="flex justify-end border-t pt-3">
                 <Button
                   onClick={() => setViewModalOpen(false)}
-                  className="bg-red-600 hover:bg-red-700"
+                  className="bg-blue-700 hover:bg-blue-800"
                 >
                   Fechar
                 </Button>

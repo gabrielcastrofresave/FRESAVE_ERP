@@ -286,10 +286,10 @@ export function CalendarPage() {
       {/* Header */}
       <header className="flex flex-col gap-4 border-b border-slate-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-[#0e7490]">
+          <p className="text-xs font-semibold tracking-[0.14em] text-blue-700 dark:text-blue-300">
             CALENDÁRIO
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Gestão de Recursos
           </h1>
           <p className="mt-2 text-sm leading-6 text-slate-500">
@@ -340,7 +340,7 @@ export function CalendarPage() {
       </div>
 
       {/* Painel principal */}
-      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <section className="overflow-hidden erp-surface">
         <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative w-full sm:w-72">
             <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -386,7 +386,7 @@ export function CalendarPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 text-xs text-[#0e7490]"
+              className="h-8 text-xs text-blue-700 dark:text-blue-300"
               onClick={() => setCurrentWeek(new Date())}
             >
               Hoje
@@ -408,7 +408,7 @@ export function CalendarPage() {
                     key={i}
                     className={`min-w-[110px] px-2 py-3 text-center ${
                       isSameDay(day, new Date())
-                        ? "bg-cyan-50 text-[#0e7490]"
+                        ? "bg-cyan-50 text-blue-700 dark:text-blue-300"
                         : ""
                     }`}
                   >
@@ -463,7 +463,7 @@ export function CalendarPage() {
                                   setSelectedEvent(ev);
                                   setIsEventDetailsOpen(true);
                                 }}
-                                className="w-full rounded-md bg-[#0e7490] p-1.5 text-left text-[10px] text-white shadow-sm hover:opacity-90"
+                                className="w-full rounded-md bg-blue-700 p-1.5 text-left text-[10px] text-white shadow-sm hover:opacity-90"
                               >
                                 <p className="truncate font-semibold">
                                   {ev.local || "Reservado"}
@@ -480,7 +480,7 @@ export function CalendarPage() {
                                     day,
                                   )
                                 }
-                                className="h-12 w-full rounded-md border border-dashed border-slate-200 text-[10px] text-slate-300 hover:border-cyan-300 hover:bg-cyan-50/60 hover:text-[#0e7490]"
+                                className="h-12 w-full rounded-md border border-dashed border-slate-200 text-[10px] text-slate-300 hover:border-cyan-300 hover:bg-cyan-50/60 hover:text-blue-700 dark:text-blue-300"
                               >
                                 + Reservar
                               </button>
@@ -538,7 +538,7 @@ export function CalendarPage() {
                                   ? "bg-slate-400"
                                   : isFirstDay
                                     ? "bg-emerald-600"
-                                    : "bg-[#0e7490]"
+                                    : "bg-blue-700"
                               }`}
                             >
                               <p className="flex items-center gap-1 truncate font-semibold">
@@ -559,7 +559,7 @@ export function CalendarPage() {
                               onClick={() =>
                                 openEquipmentCreate(item)
                               }
-                              className="h-12 w-full rounded-md border border-dashed border-slate-200 text-[10px] text-slate-300 hover:border-cyan-300 hover:bg-cyan-50/60 hover:text-[#0e7490]"
+                              className="h-12 w-full rounded-md border border-dashed border-slate-200 text-[10px] text-slate-300 hover:border-cyan-300 hover:bg-cyan-50/60 hover:text-blue-700 dark:text-blue-300"
                             >
                               + Requisitar
                             </button>
@@ -633,7 +633,7 @@ export function CalendarPage() {
               </Button>
               <Button
                 type="submit"
-                className="bg-[#0e7490] hover:bg-[#0a6078]"
+                className="bg-blue-700 hover:bg-[#0a6078]"
               >
                 Reservar
               </Button>
@@ -769,7 +769,7 @@ export function CalendarPage() {
               </Button>
               <Button
                 type="submit"
-                className="bg-[#0e7490] hover:bg-[#0a6078]"
+                className="bg-blue-700 hover:bg-[#0a6078]"
               >
                 Requisitar
               </Button>
@@ -829,7 +829,7 @@ export function CalendarPage() {
                 <Label className="text-xs text-slate-500">
                   Status
                 </Label>
-                <p className="font-medium text-[#0e7490]">
+                <p className="font-medium text-blue-700 dark:text-blue-300">
                   {selectedSchedule.status === "ativo"
                     ? "Em curso"
                     : "Devolvido"}
@@ -948,7 +948,7 @@ export function CalendarPage() {
                         </td>
                         <td className="px-4 py-2">
                           {s.status === "ativo" ? (
-                            <span className="rounded bg-cyan-50 px-2 py-0.5 text-xs font-semibold text-[#0e7490]">
+                            <span className="rounded bg-cyan-50 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
                               Ativo
                             </span>
                           ) : (
@@ -967,7 +967,7 @@ export function CalendarPage() {
           <DialogFooter>
             <Button
               onClick={() => setIsReportOpen(false)}
-              className="bg-[#0e7490] hover:bg-[#0a6078]"
+              className="bg-blue-700 hover:bg-[#0a6078]"
             >
               Fechar
             </Button>

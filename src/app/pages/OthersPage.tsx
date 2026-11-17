@@ -136,13 +136,13 @@ function KpiCard({
   }[accent ?? "blue"];
 
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex items-center gap-3 erp-surface px-4 py-3">
       <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${cls}`}>
         <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0">
-        <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{label}</p>
-        <p className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">{value}</p>
+        <p className="truncate text-xs text-muted-foreground">{label}</p>
+        <p className="text-lg font-semibold text-foreground">{value}</p>
         {sub && <p className="text-[10px] text-zinc-400">{sub}</p>}
       </div>
     </div>
@@ -458,13 +458,13 @@ export function OthersPage() {
     <div className="flex h-full flex-col overflow-hidden">
 
       {/* Cabeçalho */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 bg-white px-6 py-3 dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-card px-6 py-3">
         <div>
           <div className="flex items-center gap-1.5 text-[11px] text-zinc-400">
             <span>Intranet</span><span>/</span>
             <span className="text-zinc-600 dark:text-zinc-300">Gestão de Stock</span>
           </div>
-          <h1 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Inventário e Movimentos</h1>
+          <h1 className="text-lg font-semibold text-foreground">Inventário e Movimentos</h1>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleRefresh} title="Atualizar">
@@ -475,7 +475,7 @@ export function OthersPage() {
             disabled={tab === "stock" ? filteredStock.length === 0 : filteredMovements.length === 0}>
             <Download className="mr-1.5 h-3.5 w-3.5" />CSV
           </Button>
-          <Button size="sm" className="h-8 bg-red-600 text-white hover:bg-red-700"
+          <Button size="sm" className="h-8 bg-blue-700 text-white hover:bg-blue-800"
             onClick={() => { resetItemForm(); setIsItemModal(true); }}>
             <PackagePlus className="mr-1.5 h-3.5 w-3.5" />Novo Artigo
           </Button>
@@ -491,7 +491,7 @@ export function OthersPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex shrink-0 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="flex shrink-0 border-b border-border bg-card">
         {(["stock", "movimentos"] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`flex items-center gap-2 border-b-2 px-5 py-2.5 text-sm font-medium transition-colors ${
@@ -595,7 +595,7 @@ export function OthersPage() {
         {tab === "stock" && (
           <>
             {/* Cabeçalho de colunas */}
-            <div className="flex shrink-0 border-b border-zinc-200 bg-zinc-50 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+            <div className="flex shrink-0 border-b border-border bg-muted/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               <div className="w-10 shrink-0 px-3 py-2 text-center">#</div>
               <div className="min-w-0 flex-1 cursor-pointer select-none px-3 py-2 hover:text-zinc-700 dark:hover:text-zinc-200"
                 onClick={() => toggleStockSort("nome")}>
@@ -651,7 +651,7 @@ export function OthersPage() {
                             {item.descricao && <p className="truncate text-[11px] text-zinc-400">{item.descricao}</p>}
                           </button>
                         </div>
-                        <div className="w-36 shrink-0 px-3 font-mono text-xs text-zinc-500 dark:text-zinc-400">
+                        <div className="w-36 shrink-0 px-3 font-mono text-xs text-muted-foreground">
                           <div className="truncate">{item.identificacao ?? "—"}</div>
                           {item.referencia_contabilidade && (
                             <div className="truncate text-[10px] text-zinc-400">{item.referencia_contabilidade}</div>
@@ -714,7 +714,7 @@ export function OthersPage() {
         {tab === "movimentos" && (
           <>
             {/* Cabeçalho de colunas */}
-            <div className="flex shrink-0 border-b border-zinc-200 bg-zinc-50 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+            <div className="flex shrink-0 border-b border-border bg-muted/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               <div className="w-10 shrink-0 px-3 py-2 text-center">#</div>
               <div className="w-24 shrink-0 cursor-pointer select-none px-3 py-2" onClick={() => toggleMovSort("data")}>
                 Data <SortIcon active={movSort.key === "data"} dir={movSort.dir} />
@@ -860,7 +860,7 @@ export function OthersPage() {
             </div>
             <div className="flex justify-end gap-2 border-t pt-3">
               <Button type="button" variant="outline" onClick={() => { setIsItemModal(false); resetItemForm(); }}>Cancelar</Button>
-              <Button type="submit" className="bg-red-600 hover:bg-red-700">
+              <Button type="submit" className="bg-blue-700 hover:bg-blue-800">
                 {editingItem ? "Guardar Alterações" : "Criar Artigo"}
               </Button>
             </div>

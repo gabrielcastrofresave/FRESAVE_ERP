@@ -346,7 +346,7 @@ export function ProductionCalendarPage() {
         <h1 className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">
           Acesso Restrito
         </h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-sm text-muted-foreground">
           Esta página só está disponível para administração.
         </p>
       </div>
@@ -408,15 +408,15 @@ export function ProductionCalendarPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-7">
-      <header className="flex flex-col gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800 xl:flex-row xl:items-end xl:justify-between">
+      <header className="flex flex-col gap-4 border-b border-border pb-6 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-red-600">
+          <p className="text-xs font-semibold tracking-[0.14em] text-amber-600 dark:text-amber-300">
             TEMPOS E ATIVIDADE
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Calendário de Produção
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             Vê, cria e corrige os registos de toda a equipa. As
             alterações feitas aqui prevalecem sobre o que cada pessoa
             registou na Minha Atividade.
@@ -424,7 +424,7 @@ export function ProductionCalendarPage() {
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
-            <Button className="h-10 bg-red-600 text-white hover:bg-red-700">
+            <Button className="h-10 bg-blue-700 text-white hover:bg-blue-800">
               <Plus className="mr-2 h-4 w-4" />
               Novo Registo
             </Button>
@@ -495,7 +495,7 @@ export function ProductionCalendarPage() {
         </select>
       </div>
 
-      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="overflow-hidden erp-surface">
         <div className="flex flex-col gap-4 border-b border-zinc-100 px-4 py-4 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <Button
@@ -1199,7 +1199,7 @@ function MonthView({
                 key={day.toISOString()}
                 className={`min-h-[8.5rem] p-1.5 ${
                   currentMonth
-                    ? "bg-white dark:bg-zinc-900"
+                    ? "bg-card"
                     : "bg-zinc-50/60 dark:bg-zinc-900/40"
                 }`}
               >
@@ -1502,7 +1502,7 @@ function TaskForm({
         </Button>
         <Button
           type="submit"
-          className="bg-red-600 hover:bg-red-700"
+          className="bg-blue-700 hover:bg-blue-800"
           disabled={loading}
         >
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

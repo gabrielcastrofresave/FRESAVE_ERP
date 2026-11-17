@@ -400,7 +400,7 @@ function SectionCard({
   return (
     <div
       ref={sectionRef}
-      className="scroll-mt-24 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+      className="scroll-mt-24 overflow-hidden erp-surface"
     >
       <div className="flex items-center justify-between gap-2 px-5 py-3">
         <button
@@ -415,7 +415,7 @@ function SectionCard({
             <ChevronRight className="h-4 w-4 shrink-0 text-zinc-400" />
           )}
           <span className="text-zinc-400">{icon}</span>
-          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+          <h3 className="text-sm font-semibold text-foreground">
             {title}
           </h3>
           <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] font-medium text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
@@ -735,7 +735,7 @@ export function AccountingPage() {
         <h1 className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">
           Acesso Restrito
         </h1>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
+        <p className="text-sm text-muted-foreground">
           Esta página só está disponível para administração e
           escritório.
         </p>
@@ -756,14 +756,14 @@ export function AccountingPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-7">
-      <header className="border-b border-zinc-200 pb-6 dark:border-zinc-800">
-        <p className="text-xs font-semibold tracking-[0.14em] text-red-600">
+      <header className="border-b border-border pb-6">
+        <p className="text-xs font-semibold tracking-[0.14em] text-amber-600 dark:text-amber-300">
           FINANCEIRO
         </p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
           Contabilidade de Projetos
         </h1>
-        <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
           Consulta o custo total de cada máquina/projeto: horas
           trabalhadas, peças utilizadas e outros custos.
         </p>
@@ -787,7 +787,7 @@ export function AccountingPage() {
         {/* Lista de projetos */}
         <div
           onKeyDown={handlePanelKeyDown}
-          className="flex flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]"
+          className="flex flex-col overflow-hidden erp-surface lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]"
         >
           {/* Filtros */}
           <div className="space-y-3 border-b border-zinc-100 p-3 dark:border-zinc-800">
@@ -874,7 +874,7 @@ export function AccountingPage() {
                 <option value="referencia">Referência</option>
               </select>
               <div className="flex items-center gap-2">
-                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                <p className="text-xs text-muted-foreground">
                   {filteredJobs.length} de {jobs.length}
                 </p>
                 <button
@@ -1189,7 +1189,7 @@ function DeleteProjectDialog({
           </p>
         </div>
         <div>
-          <p className="mb-2 text-sm font-medium text-zinc-900 dark:text-zinc-50">
+          <p className="mb-2 text-sm font-medium text-foreground">
             Tens a certeza que queres eliminar:
           </p>
           <p className="text-sm text-zinc-600 dark:text-zinc-300">
@@ -1205,7 +1205,7 @@ function DeleteProjectDialog({
           </button>
           <button
             onClick={() => setStep("verify")}
-            className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+            className="flex-1 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
           >
             Sim, quero eliminar
           </button>
@@ -1267,7 +1267,7 @@ function DeleteProjectDialog({
         <button
           type="submit"
           disabled={loading || !matches}
-          className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex-1 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading && (
             <Loader2 className="mr-2 inline h-3.5 w-3.5 animate-spin" />
@@ -1327,7 +1327,7 @@ const HourRow = memo(function HourRow({
       <td className="px-5 py-2 text-sm text-zinc-800 dark:text-zinc-100">
         {line.user_nome}
       </td>
-      <td className="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
+      <td className="px-4 py-2 text-sm text-muted-foreground">
         {formatDatePt(line.data)}
       </td>
       <td className="px-4 py-2 text-right text-sm text-zinc-600 dark:text-zinc-300">
@@ -1376,7 +1376,7 @@ const HourRow = memo(function HourRow({
           </span>
         </div>
       </td>
-      <td className="px-5 py-2 text-right text-sm font-medium text-zinc-900 dark:text-zinc-50">
+      <td className="px-5 py-2 text-right text-sm font-medium text-foreground">
         {formatEuro(line.subtotal)}
       </td>
     </tr>
@@ -2000,7 +2000,7 @@ function JobCostSheet({
 
   if (loadError) {
     return (
-      <div className="flex min-h-64 flex-col items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-white text-center dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="flex min-h-64 flex-col items-center justify-center gap-3 erp-surface text-center">
         <AlertTriangle className="h-8 w-8 text-amber-500" />
         <p className="text-sm text-zinc-600 dark:text-zinc-300">
           Não foi possível carregar a ficha de custos.
@@ -2024,7 +2024,7 @@ function JobCostSheet({
   return (
     <div className="space-y-5">
       {/* Header do projeto + total */}
-      <div className="z-20 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900 lg:sticky lg:top-4">
+      <div className="z-20 overflow-hidden erp-surface lg:sticky lg:top-4">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -2043,7 +2043,7 @@ function JobCostSheet({
                   : "Em Curso"}
               </Badge>
             </div>
-            <h2 className="mt-1 truncate text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+            <h2 className="mt-1 truncate text-lg font-semibold text-foreground">
               {job.title}
             </h2>
           </div>
@@ -2296,7 +2296,7 @@ function JobCostSheet({
                       <td className="px-4 py-2 text-right text-sm text-zinc-600 dark:text-zinc-300">
                         {formatEuro(p.preco_unitario)}
                       </td>
-                      <td className="px-5 py-2 text-right text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                      <td className="px-5 py-2 text-right text-sm font-medium text-foreground">
                         {formatEuro(p.subtotal)}
                       </td>
                     </tr>
@@ -2395,7 +2395,7 @@ function JobCostSheet({
               </div>
 
               {/* Preço/hora em massa */}
-              <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span>Aplicar preço/hora às linhas visíveis:</span>
                 <Input
                   type="number"
@@ -2547,7 +2547,7 @@ function JobCostSheet({
             <DialogTrigger asChild>
               <Button
                 size="sm"
-                className="h-8 bg-red-600 text-xs text-white hover:bg-red-700"
+                className="h-8 bg-blue-700 text-xs text-white hover:bg-blue-800"
               >
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 Adicionar
@@ -2642,10 +2642,10 @@ function JobCostSheet({
                       <td className="px-5 py-2 text-sm text-zinc-800 dark:text-zinc-100">
                         {e.descricao}
                       </td>
-                      <td className="px-4 py-2 text-sm text-zinc-500 dark:text-zinc-400">
+                      <td className="px-4 py-2 text-sm text-muted-foreground">
                         {e.categoria || "-"}
                       </td>
-                      <td className="px-4 py-2 text-right text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                      <td className="px-4 py-2 text-right text-sm font-medium text-foreground">
                         {formatEuro(Number(e.valor))}
                       </td>
                       <td className="px-5 py-2 text-right">
@@ -2653,7 +2653,7 @@ function JobCostSheet({
                           <div className="flex items-center justify-end gap-1">
                             <Button
                               size="sm"
-                              className="h-7 bg-red-600 px-2 text-xs text-white hover:bg-red-700"
+                              className="h-7 bg-blue-700 px-2 text-xs text-white hover:bg-blue-800"
                               onClick={() =>
                                 handleDeleteExtra(e)
                               }
@@ -2831,7 +2831,7 @@ function ExtraCostForm({
         </Button>
         <Button
           type="submit"
-          className="bg-red-600 hover:bg-red-700"
+          className="bg-blue-700 hover:bg-blue-800"
           disabled={loading || !descricao.trim()}
         >
           {loading && (

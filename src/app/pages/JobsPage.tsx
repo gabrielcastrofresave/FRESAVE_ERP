@@ -543,15 +543,15 @@ export function JobsPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-7">
-      <header className="flex flex-col gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800 lg:flex-row lg:items-end lg:justify-between">
+      <header className="flex flex-col gap-4 border-b border-border pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-red-600">
+          <p className="text-xs font-semibold tracking-[0.14em] text-amber-600 dark:text-amber-300">
             ORDEM DE TRABALHO
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Trabalhos e Relatórios
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             Cada trabalho tem um prazo, as mesmas fases de
             produção e, opcionalmente, um limite de horas. Só é
             possível concluir depois de todas as fases estarem
@@ -568,7 +568,7 @@ export function JobsPage() {
           >
             <DialogTrigger asChild>
               <Button
-                className="h-10 bg-red-600 text-white hover:bg-red-700"
+                className="h-10 bg-blue-700 text-white hover:bg-blue-800"
                 onClick={() => setEditingJob(null)}
               >
                 <Plus className="mr-2 h-4 w-4" />
@@ -624,7 +624,7 @@ export function JobsPage() {
         />
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="overflow-hidden erp-surface">
         <div className="space-y-3 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
           <div className="flex flex-wrap gap-1.5">
             {STATUS_OPTIONS.map((option) => (
@@ -787,7 +787,7 @@ export function JobsPage() {
 
         {total > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 px-5 py-3 dark:border-zinc-800">
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-xs text-muted-foreground">
               {firstShown}–{lastShown} de {total}
             </p>
             <div className="flex items-center gap-1">
@@ -802,7 +802,7 @@ export function JobsPage() {
                 <ChevronLeft className="mr-1 h-4 w-4" />
                 Anterior
               </Button>
-              <span className="px-3 text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="px-3 text-xs text-muted-foreground">
                 Página {page} de {totalPages}
               </span>
               <Button
@@ -897,10 +897,10 @@ function WorkMetric({
         <Icon className="h-5 w-5" />
       </div>
       <div>
-        <p className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+        <p className="text-2xl font-semibold tracking-tight text-foreground">
           {value}
         </p>
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="text-xs text-muted-foreground">
           {label}
         </p>
       </div>
@@ -1107,7 +1107,7 @@ function ActiveJob({
             )}
             <Button
               size="sm"
-              className="ml-auto h-8 bg-red-600 text-xs text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+              className="ml-auto h-8 bg-blue-700 text-xs text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
               onClick={onComplete}
               disabled={!hasNoChecklist && !checklistComplete}
             >
@@ -1274,7 +1274,7 @@ function JobForm({
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              <p className="text-xs text-muted-foreground">
                 Código: <strong>{preview || "…"}</strong>
               </p>
             </>
@@ -1341,7 +1341,7 @@ function JobForm({
           <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
             Fases para {selectedDept}
           </p>
-          <ul className="mt-1.5 space-y-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+          <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground">
             {checklistForDept?.map((key) => (
               <li key={key}>• {CHECKLIST_LABELS[key] || key}</li>
             ))}
@@ -1367,7 +1367,7 @@ function JobForm({
         </Button>
         <Button
           type="submit"
-          className="bg-red-600 hover:bg-red-700"
+          className="bg-blue-700 hover:bg-blue-800"
           disabled={loading}
         >
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -1457,7 +1457,7 @@ function DeleteJobForm({
         <Button
           type="submit"
           disabled={!matches || loading}
-          className="bg-red-600 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+          className="bg-blue-700 text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
         >
           {loading ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1590,7 +1590,7 @@ function CompletionForm({
         <Button
           type="submit"
           disabled={loading}
-          className="bg-red-600 hover:bg-red-700"
+          className="bg-blue-700 hover:bg-blue-800"
         >
           {loading && (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

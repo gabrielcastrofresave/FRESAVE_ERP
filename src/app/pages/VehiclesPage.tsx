@@ -203,15 +203,15 @@ export function VehiclesPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-7">
       {/* Header */}
-      <header className="flex flex-col gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800 lg:flex-row lg:items-end lg:justify-between">
+      <header className="flex flex-col gap-4 border-b border-border pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-red-600">
+          <p className="text-xs font-semibold tracking-[0.14em] text-amber-600 dark:text-amber-300">
             FROTA
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Gestão de Viaturas
           </h1>
-          <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
             Consulte e mantenha atualizada a frota de viaturas
             (carros, carrinhas, etc.).
           </p>
@@ -224,7 +224,7 @@ export function VehiclesPage() {
             <DialogTrigger asChild>
               <Button
                 onClick={resetForm}
-                className="h-10 bg-red-600 text-white hover:bg-red-700"
+                className="h-10 bg-blue-700 text-white hover:bg-blue-800"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Adicionar Viatura
@@ -386,7 +386,7 @@ export function VehiclesPage() {
                   </Button>
                   <Button
                     type="submit"
-                    className="bg-red-600 hover:bg-red-700"
+                    className="bg-blue-700 hover:bg-blue-800"
                   >
                     {editingVehicle
                       ? "Atualizar Viatura"
@@ -414,9 +414,9 @@ export function VehiclesPage() {
       </section>
 
       {/* Tabela */}
-      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="overflow-hidden erp-surface">
         <div className="flex flex-col gap-3 border-b border-zinc-100 p-4 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+          <h2 className="text-lg font-semibold text-foreground">
             Viaturas ({filteredVehicles.length})
           </h2>
           <div className="relative w-full sm:w-72">
@@ -469,7 +469,7 @@ export function VehiclesPage() {
                     <td className="px-4 py-3 text-sm text-zinc-700 dark:text-zinc-300">
                       {vehicle.modelo}
                     </td>
-                    <td className="px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
                       {vehicle.ano}
                     </td>
                     <td className="px-4 py-3">
@@ -531,7 +531,7 @@ export function VehiclesPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Matrícula
                   </p>
                   <p className="mt-1 font-mono text-sm text-zinc-800 dark:text-zinc-100">
@@ -539,7 +539,7 @@ export function VehiclesPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Marca
                   </p>
                   <p className="mt-1 text-sm text-zinc-800 dark:text-zinc-100">
@@ -547,7 +547,7 @@ export function VehiclesPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Modelo
                   </p>
                   <p className="mt-1 text-sm text-zinc-800 dark:text-zinc-100">
@@ -555,7 +555,7 @@ export function VehiclesPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Ano
                   </p>
                   <p className="mt-1 text-sm text-zinc-800 dark:text-zinc-100">
@@ -563,7 +563,7 @@ export function VehiclesPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Seguradora
                   </p>
                   <p className="mt-1 text-sm text-zinc-800 dark:text-zinc-100">
@@ -571,7 +571,7 @@ export function VehiclesPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Validade Seguro
                   </p>
                   <p className="mt-1 text-sm text-zinc-800 dark:text-zinc-100">
@@ -583,7 +583,7 @@ export function VehiclesPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Validade Inspeção
                   </p>
                   <p className="mt-1 text-sm text-zinc-800 dark:text-zinc-100">
@@ -595,7 +595,7 @@ export function VehiclesPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Status
                   </p>
                   <div className="mt-1">
@@ -606,7 +606,7 @@ export function VehiclesPage() {
 
               {selectedVehicleForView.especificacoes && (
                 <div>
-                  <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  <p className="text-xs font-medium text-muted-foreground">
                     Especificações
                   </p>
                   <p className="mt-1 text-sm text-zinc-700 dark:text-zinc-300">
@@ -623,7 +623,7 @@ export function VehiclesPage() {
               <div className="flex justify-end border-t pt-3">
                 <Button
                   onClick={() => setViewModalOpen(false)}
-                  className="bg-red-600 hover:bg-red-700"
+                  className="bg-blue-700 hover:bg-blue-800"
                 >
                   Fechar
                 </Button>
@@ -646,15 +646,15 @@ function MiniMetric({
   warning?: boolean;
 }) {
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white px-5 py-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-      <p className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+    <div className="erp-surface px-5 py-4">
+      <p className="text-xs font-medium text-muted-foreground">
         {label}
       </p>
       <p
         className={`mt-2 text-2xl font-semibold tracking-tight ${
           warning && value > 0
             ? "text-red-600"
-            : "text-zinc-900 dark:text-zinc-50"
+            : "text-foreground"
         }`}
       >
         {value}
@@ -790,10 +790,10 @@ function VehicleFilesSection({
   return (
     <div className="space-y-3 border-t border-zinc-100 pt-4 dark:border-zinc-800">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+        <p className="text-sm font-semibold text-foreground">
           Ficheiros
         </p>
-        <span className="text-xs text-zinc-500 dark:text-zinc-400">
+        <span className="text-xs text-muted-foreground">
           {files.length}{" "}
           {files.length === 1 ? "ficheiro" : "ficheiros"}
         </span>
@@ -1010,7 +1010,7 @@ function VehicleFilesSection({
             <Button
               type="button"
               onClick={() => setPreviewId(null)}
-              className="bg-red-600 hover:bg-red-700"
+              className="bg-blue-700 hover:bg-blue-800"
             >
               Fechar
             </Button>

@@ -167,15 +167,15 @@ export function SchedulesPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-7">
-      <header className="flex flex-col gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800 lg:flex-row lg:items-end lg:justify-between">
+      <header className="flex flex-col gap-4 border-b border-border pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-red-600">
+          <p className="text-xs font-semibold tracking-[0.14em] text-amber-600 dark:text-amber-300">
             PLANEAMENTO
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Planeamentos de Trabalho
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             Cada trabalho pode ter vários temas. Na Minha Atividade escolhe-se o
             tema e o trabalho fica ligado automaticamente.
           </p>
@@ -190,7 +190,7 @@ export function SchedulesPage() {
           >
             <DialogTrigger asChild>
               <Button
-                className="h-10 bg-red-600 text-white hover:bg-red-700"
+                className="h-10 bg-blue-700 text-white hover:bg-blue-800"
                 onClick={() => setEditing(null)}
               >
                 <Plus className="mr-2 h-4 w-4" />
@@ -217,7 +217,7 @@ export function SchedulesPage() {
         )}
       </header>
 
-      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="overflow-hidden erp-surface">
         <div className="space-y-3 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
           <div className="flex flex-wrap gap-1.5">
             {STATUS_OPTIONS.map((option) => (
@@ -329,7 +329,7 @@ export function SchedulesPage() {
 
         {total > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 px-5 py-3 dark:border-zinc-800">
-            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            <p className="text-xs text-muted-foreground">
               {firstShown}–{lastShown} de {total}
             </p>
             <div className="flex items-center gap-1">
@@ -344,7 +344,7 @@ export function SchedulesPage() {
                 <ChevronLeft className="mr-1 h-4 w-4" />
                 Anterior
               </Button>
-              <span className="px-3 text-xs text-zinc-500 dark:text-zinc-400">
+              <span className="px-3 text-xs text-muted-foreground">
                 Página {page} de {totalPages}
               </span>
               <Button
@@ -403,7 +403,7 @@ function ScheduleRow({
         <p className="truncate text-sm font-medium text-zinc-800 dark:text-zinc-100">
           {schedule.titulo}
         </p>
-        <p className="mt-0.5 truncate text-xs text-zinc-500 dark:text-zinc-400">
+        <p className="mt-0.5 truncate text-xs text-muted-foreground">
           {job?.title || "Trabalho removido"}
           {clientName ? ` · ${clientName}` : ""}
         </p>
@@ -523,10 +523,10 @@ function JobPicker({
       {value && (
         <div className="flex items-center justify-between gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 dark:border-red-900 dark:bg-red-950/30">
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
+            <p className="truncate text-sm font-medium text-foreground">
               {value.title}
             </p>
-            <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+            <p className="font-mono text-[11px] text-muted-foreground">
               {value.reference}
             </p>
           </div>
@@ -738,7 +738,7 @@ function ScheduleForm({
             Adicionar tema
           </Button>
         )}
-        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+        <p className="text-[11px] text-muted-foreground">
           Cada tema aparece na Minha Atividade já ligado a este trabalho.
         </p>
       </div>
@@ -755,7 +755,7 @@ function ScheduleForm({
         </Button>
         <Button
           type="submit"
-          className="bg-red-600 text-white hover:bg-red-700"
+          className="bg-blue-700 text-white hover:bg-blue-800"
           disabled={loading}
         >
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -819,7 +819,7 @@ function DeleteScheduleForm({
         <Button
           type="submit"
           disabled={loading}
-          className="bg-red-600 text-white hover:bg-red-700"
+          className="bg-blue-700 text-white hover:bg-blue-800"
         >
           {loading ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

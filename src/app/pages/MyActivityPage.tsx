@@ -599,22 +599,22 @@ export function MyActivityPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-7">
-      <header className="flex flex-col gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800 xl:flex-row xl:items-end xl:justify-between">
+      <header className="flex flex-col gap-4 border-b border-border pb-6 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-red-600">
+          <p className="text-xs font-semibold tracking-[0.14em] text-amber-600 dark:text-amber-300">
             O MEU ESPAÇO
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             A Minha Atividade
           </h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             Os teus registos de horas. Clica num registo para o
             editar.
           </p>
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
-            <Button className="h-10 bg-red-600 text-white hover:bg-red-700">
+            <Button className="h-10 bg-blue-700 text-white hover:bg-blue-800">
               <Plus className="mr-2 h-4 w-4" />
               Novo Registo
             </Button>
@@ -636,7 +636,7 @@ export function MyActivityPage() {
         </Dialog>
       </header>
 
-      <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      <section className="overflow-hidden erp-surface">
         <div className="flex flex-col gap-4 border-b border-zinc-100 px-4 py-4 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <Button
@@ -740,7 +740,7 @@ export function MyActivityPage() {
                   <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
                     Total do dia
                   </span>
-                  <span className="text-sm font-bold text-zinc-900 dark:text-zinc-50">
+                  <span className="text-sm font-bold text-foreground">
                     {formatHours(dayTotal(cursor))}
                   </span>
                 </div>
@@ -759,7 +759,7 @@ export function MyActivityPage() {
                   className={`overflow-hidden rounded-lg border ${
                     hoje
                       ? "border-red-200 dark:border-red-900/50"
-                      : "border-zinc-200 dark:border-zinc-800"
+                      : "border-border"
                   }`}
                 >
                   {/* Cabeçalho do dia */}
@@ -790,7 +790,7 @@ export function MyActivityPage() {
                         {day.getDate()}
                       </span>
                     </div>
-                    <span className="text-xs font-bold text-zinc-900 dark:text-zinc-50">
+                    <span className="text-xs font-bold text-foreground">
                       {total > 0 ? formatHours(total) : "—"}
                     </span>
                   </div>
@@ -878,7 +878,7 @@ function TaskPill({
       }`}
     >
       <p
-        className={`min-w-0 text-xs font-semibold text-zinc-900 dark:text-zinc-50 ${
+        className={`min-w-0 text-xs font-semibold text-foreground ${
           wrap ? "whitespace-normal break-words" : "truncate"
         }`}
       >
@@ -886,7 +886,7 @@ function TaskPill({
       </p>
       {row.descricao && (
         <p
-          className={`mt-1 min-w-0 text-[11px] text-zinc-500 dark:text-zinc-400 ${
+          className={`mt-1 min-w-0 text-[11px] text-muted-foreground ${
             wrap ? "whitespace-pre-line break-words" : "line-clamp-2"
           }`}
         >
@@ -894,7 +894,7 @@ function TaskPill({
         </p>
       )}
       <div className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[10px]">
-        <span className="text-zinc-500 dark:text-zinc-400">
+        <span className="text-muted-foreground">
           {foiPorHoras(row)
             ? "Horas trabalhadas"
             : row.hora_inicio && row.hora_fim
@@ -902,7 +902,7 @@ function TaskPill({
               : "Sem horário"}
         </span>
         {liquidos !== null && (
-          <span className="font-bold text-zinc-900 dark:text-zinc-50">
+          <span className="font-bold text-foreground">
             {formatHours(liquidos)}
           </span>
         )}
@@ -954,7 +954,7 @@ function MonthView({
                 key={day.toISOString()}
                 className={`min-h-[6.5rem] p-2 ${
                   currentMonth
-                    ? "bg-white dark:bg-zinc-900"
+                    ? "bg-card"
                     : "bg-zinc-50/60 dark:bg-zinc-900/40"
                 }`}
               >
@@ -971,7 +971,7 @@ function MonthView({
                     {day.getDate()}
                   </div>
                   {total > 0 && (
-                    <span className="text-[10px] font-bold text-zinc-900 dark:text-zinc-50">
+                    <span className="text-[10px] font-bold text-foreground">
                       {formatHours(total)}
                     </span>
                   )}
@@ -1350,7 +1350,7 @@ function RegistoForm({
             ? formatHours(horasCalculadas)
             : "—"}
         </div>
-        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+        <p className="text-[11px] text-muted-foreground">
           {modo === "horario"
             ? "Pausas de lanche (10:30–10:40 e 16:00–16:10) descontadas automaticamente."
             : "Indica as horas líquidas (já sem almoço nem pausas). O registo fica guardado com início às 08:00."}
@@ -1367,7 +1367,7 @@ function RegistoForm({
         </Button>
         <Button
           type="submit"
-          className="bg-red-600 hover:bg-red-700"
+          className="bg-blue-700 hover:bg-blue-800"
           disabled={loading}
         >
           {loading && (

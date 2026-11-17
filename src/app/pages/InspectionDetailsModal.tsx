@@ -54,7 +54,7 @@ export function InspectionDetailsModal({
     statusIcon = <AlertTriangle className="w-3 h-3 mr-1" />;
   } else if (nextDate < today) {
     status = "Vencida";
-    statusClass = "bg-red-600 hover:bg-red-700";
+    statusClass = "bg-blue-700 hover:bg-blue-800";
     statusIcon = <X className="w-3 h-3 mr-1" />;
   } else if (
     nextDate.getTime() - today.getTime() <
