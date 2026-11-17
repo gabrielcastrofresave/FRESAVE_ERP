@@ -30,8 +30,8 @@ body { overflow-x: hidden; }
 }
 
 /* Utilitários de composição usados pelos módulos à medida que são redesenhados. */
-.erp-surface { border: 1px solid var(--border); background: var(--card); border-radius: 1rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05); }
-.dark .erp-surface { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14); }
+.erp-surface { border: 0.5px solid color-mix(in srgb, var(--border) 80%, transparent); background: var(--card); border-radius: 1.25rem; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04); }
+.dark .erp-surface { box-shadow: none; border-color: color-mix(in srgb, var(--border) 60%, transparent); }
 .erp-eyebrow { color: #dc2626; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
 .dark .erp-eyebrow { color: #f87171; }
 .erp-tabular { font-variant-numeric: tabular-nums; }
@@ -46,10 +46,10 @@ body { overflow-x: hidden; }
 @keyframes erp-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes erp-shimmer { 100% { transform: translateX(100%); } }
 
-.erp-rise { animation: erp-rise .6s cubic-bezier(.22,.8,.3,1) backwards; }
+.erp-rise { animation: erp-rise .6s cubic-bezier(.32,.72,0,1) backwards; }
 
 /* Os blocos de cada página entram em sequência (cabeçalho, KPIs, cartões…) */
-.erp-page > * > * { animation: erp-rise .5s cubic-bezier(.22,.8,.3,1) backwards; }
+.erp-page > * > * { animation: erp-rise .5s cubic-bezier(.32,.72,0,1) backwards; }
 .erp-page > * > *:nth-child(1) { animation-delay: .00s; }
 .erp-page > * > *:nth-child(2) { animation-delay: .06s; }
 .erp-page > * > *:nth-child(3) { animation-delay: .12s; }
@@ -60,29 +60,33 @@ body { overflow-x: hidden; }
 
 /* Cartões e botões "vivos" */
 .erp-surface { transition: box-shadow .25s ease, border-color .25s ease, transform .25s ease; }
-.erp-surface:hover { border-color: color-mix(in srgb, var(--primary) 28%, var(--border)); box-shadow: 0 14px 38px rgba(0, 0, 0, 0.09); }
-.dark .erp-surface:hover { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35); }
+.erp-surface:hover { box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05), 0 14px 34px rgba(0, 0, 0, 0.08); }
+.dark .erp-surface:hover { box-shadow: none; }
 .erp-lift:hover { transform: translateY(-3px); }
 
-/* KPI: barra vermelha de assinatura à esquerda */
-.erp-kpi { position: relative; overflow: hidden; }
-.erp-kpi::before { content: ""; position: absolute; left: 0; top: 14%; bottom: 14%; width: 3px; border-radius: 0 3px 3px 0; background: var(--primary); opacity: .85; transition: top .25s ease, bottom .25s ease; }
-.erp-kpi:hover::before { top: 0; bottom: 0; }
 
 button, [role="button"], a { transition: background-color .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .12s ease, opacity .18s ease; }
-button:not(:disabled):active, [role="button"]:active { transform: scale(0.97); }
+button:not(:disabled):active, [role="button"]:active { transform: scale(0.96); transition-duration: .08s; }
 
 tbody tr { transition: background-color .15s ease; }
 tbody tr:hover { background-color: color-mix(in srgb, var(--primary) 5%, transparent); }
 
 /* Diálogos e menus */
-[data-slot="dialog-content"], [role="dialog"] { animation: erp-fade .2s ease-out backwards; }
 
 html { scroll-behavior: smooth; }
 * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted-foreground) 40%, transparent) transparent; }
 
 @media (prefers-reduced-motion: reduce) {
-  .erp-rise, .erp-page > * > *, [data-slot="dialog-content"], [role="dialog"] { animation: none !important; }
+  .erp-rise, .erp-page > * > * { animation: none !important; }
   .erp-lift:hover, button:not(:disabled):active { transform: none !important; }
   html { scroll-behavior: auto; }
 }
+
+/* ───────── Estilo iOS ───────── */
+.erp-glass { background: color-mix(in srgb, var(--card) 72%, transparent); -webkit-backdrop-filter: saturate(180%) blur(22px); backdrop-filter: saturate(180%) blur(22px); }
+/* Campos "preenchidos", sem contorno, como nas Definições do iPhone */
+[data-slot="input"], textarea, [data-slot="select-trigger"] { border-color: transparent; background-color: var(--input-background); }
+[data-slot="input"]:focus-visible, textarea:focus-visible, [data-slot="select-trigger"]:focus-visible { background-color: var(--card); border-color: var(--ring); }
+/* Texto selecionável em vermelho, cursor vermelho */
+input, textarea { caret-color: var(--primary); }
+::selection { background: color-mix(in srgb, var(--primary) 25%, transparent); }

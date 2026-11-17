@@ -530,7 +530,7 @@ export function Layout({
       {/* Main content */}
       <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
         {/* Desktop topbar */}
-        <header className="hidden lg:flex bg-card/80 backdrop-blur-md border-b border-border px-6 py-3 items-center justify-between gap-4 sticky top-0 z-40">
+        <header className="hidden lg:flex erp-glass border-b border-border/60 px-6 py-3 items-center justify-between gap-4 sticky top-0 z-40">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-green-500" />
             <span className="text-sm text-muted-foreground">
@@ -549,7 +549,7 @@ export function Layout({
         </header>
 
         {/* Mobile topbar */}
-        <header className="lg:hidden bg-card/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center justify-between sticky top-0 z-40">
+        <header className="lg:hidden erp-glass border-b border-border/60 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
           <button
             onClick={() => setIsSidebarOpen(true)}
             className="erp-touch-target -ml-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
@@ -572,11 +572,11 @@ export function Layout({
         <main className="flex-1 p-3 pb-20 sm:p-5 sm:pb-20 md:p-6 md:pb-20 lg:p-7 lg:pb-7 xl:p-8 bg-background">
           <div className="mx-auto w-full max-w-[1600px]">{children}</div>
         </main>
-        <nav aria-label="Navegação rápida" className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-border bg-card/95 px-2 py-2 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] backdrop-blur lg:hidden">
+        <nav aria-label="Navegação rápida" className="mobile-bottom-nav erp-glass fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 flex items-center justify-around rounded-[1.75rem] border border-border/60 px-2 py-2 shadow-[0_10px_40px_rgba(0,0,0,0.18)] lg:hidden">
           {mobileNavItems.map((item) => {
             const Icon = item.icon;
             const active = currentPage === item.id;
-            return <button key={item.id} type="button" onClick={() => onNavigate(item.id)} className={`erp-touch-target flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] transition-colors ${active ? "text-red-600 dark:text-red-300" : "text-muted-foreground"}`} aria-current={active ? "page" : undefined}><Icon className={`h-4 w-4 ${active ? "text-red-500" : ""}`} /><span className="max-w-full truncate">{item.label}</span></button>;
+            return <button key={item.id} type="button" onClick={() => onNavigate(item.id)} className={`erp-touch-target flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] transition-colors ${active ? "bg-red-500/10 text-red-600 dark:text-red-300" : "text-muted-foreground"}`} aria-current={active ? "page" : undefined}><Icon className={`h-4 w-4 ${active ? "text-red-500" : ""}`} /><span className="max-w-full truncate">{item.label}</span></button>;
           })}
         </nav>
       </div>

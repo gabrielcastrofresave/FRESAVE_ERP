@@ -12,7 +12,7 @@ export function PageTransition({ children }: { children: ReactNode }) {
       className="erp-page"
       initial={reduzir ? false : { opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: [0.22, 0.8, 0.3, 1] }}
+      transition={{ type: "spring", stiffness: 280, damping: 28, mass: 0.9 }}
     >
       {children}
     </motion.div>
