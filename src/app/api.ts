@@ -2015,11 +2015,47 @@ export interface ServiceReport {
   document_name: string | null;
   document_url: string | null;
   document_path: string | null;
+  /** Ids dos utilizadores que foram à assistência (coluna technician_ids). */
+  technician_ids?: string[] | null;
+  /** Ficheiros anexados (tabela service_report_documents). Pode vir vazio se a migração 003 ainda não foi executada. */
+  documents?: ServiceDocument[];
   status: 'terminado' | 'por_terminar';
   created_at: string;
   updated_at: string;
   days: ServiceDay[];
   job?: any;
+}
+
+export interface ServiceDocument {
+  id: string;
+  report_id: string;
+  name: string;
+  path: string;
+  url: string;
+  size: number | null;
+  created_at: string;
+}
+
+const AT_SELECT_BASE = `
+  *,
+  days:service_days(*),
+  job:jobs(*)
+`;
+const AT_SELECT_FULL = `${AT_SELECT_BASE}, documents:service_report_documents(*)`;
+
+// A migração 003 pode ainda não ter sido executada: nesse caso a app continua a funcionar sem os ficheiros múltiplos.
+const isMissingNewSchema = (error: any) =>
+  /service_report_documents|technician_ids|relationship|schema cache/i.test(
+    `${error?.message ?? ''} ${error?.details ?? ''} ${error?.hint ?? ''}`
+  );
+
+function sortDocuments<T extends { documents?: ServiceDocument[] }>(rows: T[]): T[] {
+  rows.forEach(r => {
+    if (Array.isArray(r.documents)) {
+      r.documents.sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+    }
+  });
+  return rows;
 }
 
 export interface ServiceDay {
@@ -2035,17 +2071,13 @@ export interface ServiceDay {
 
 export const serviceReportsAPI = {
   async getAll(): Promise<ServiceReport[]> {
-    const { data, error } = await supabase
-      .from('service_reports')
-      .select(`
-        *,
-        days:service_days(*),
-        job:jobs(*)
-      `)
-      .order('created_at', { ascending: false });
+    const run = (cols: string) =>
+      supabase.from('service_reports').select(cols).order('created_at', { ascending: false });
+    let { data, error } = await run(AT_SELECT_FULL);
+    if (error && isMissingNewSchema(error)) ({ data, error } = await run(AT_SELECT_BASE));
 
     if (error) throw error;
-    return data || [];
+    return sortDocuments((data as any[]) || []);
   },
 
   async getPage(
@@ -2056,15 +2088,17 @@ export const serviceReportsAPI = {
       status?: 'terminado' | 'por_terminar' | 'todos';
       serviceType?: 'avaria' | 'preventiva' | 'garantia' | 'todos';
       jobId?: string;
+      technicianId?: string;
+      /** Assistências cujo período toca o intervalo [dateFrom, dateTo] (AAAA-MM-DD). */
+      dateFrom?: string;
+      dateTo?: string;
+      withDocuments?: boolean;
     }
   ) {
+    const build = (cols: string) => {
     let query = supabase
       .from('service_reports')
-      .select(`
-        *,
-        days:service_days(*),
-        job:jobs(*)
-      `, { count: 'exact' });
+      .select(cols, { count: 'exact' });
 
     if (filters?.search) {
       const search = filters.search.replace(/[,()%*\\]/g, ' ').trim();
@@ -2087,31 +2121,44 @@ export const serviceReportsAPI = {
       query = query.eq('job_id', filters.jobId);
     }
 
-    const { data, error, count } = await query
+    if (filters?.technicianId) {
+      query = query.contains('technician_ids', [filters.technicianId]);
+    }
+
+    if (filters?.dateFrom) {
+      query = query.gte('end_date', filters.dateFrom);
+    }
+
+    if (filters?.dateTo) {
+      query = query.lte('start_date', filters.dateTo);
+    }
+
+    return query
       .order('created_at', { ascending: false })
       .range((page - 1) * pageSize, page * pageSize - 1);
+    };
+
+    let { data, error, count } = await build(AT_SELECT_FULL);
+    if (error && isMissingNewSchema(error) && !filters?.technicianId) {
+      ({ data, error, count } = await build(AT_SELECT_BASE));
+    }
 
     if (error) throw error;
 
     return {
-      reports: data || [],
+      reports: sortDocuments(((data as any[]) || []) as ServiceReport[]),
       total: count || 0
     };
   },
 
   async getById(id: string): Promise<ServiceReport | null> {
-    const { data, error } = await supabase
-      .from('service_reports')
-      .select(`
-        *,
-        days:service_days(*),
-        job:jobs(*)
-      `)
-      .eq('id', id)
-      .single();
+    const run = (cols: string) =>
+      supabase.from('service_reports').select(cols).eq('id', id).single();
+    let { data, error } = await run(AT_SELECT_FULL);
+    if (error && isMissingNewSchema(error)) ({ data, error } = await run(AT_SELECT_BASE));
 
     if (error) throw error;
-    return data;
+    return data ? sortDocuments([data as any])[0] : null;
   },
 
   async create(report: {
@@ -2126,6 +2173,8 @@ export const serviceReportsAPI = {
     workPerformed: string;
     observations: string;
     status: 'terminado' | 'por_terminar';
+    /** Ids dos utilizadores que foram à assistência */
+    technicianIds?: string[];
     days: Array<{
       dayDate: string;
       travelHours: number;
@@ -2134,6 +2183,8 @@ export const serviceReportsAPI = {
       accommodation: string;
       materials: string;
     }>;
+    /** Um ou vários ficheiros */
+    documents?: File[];
     document?: File | null;
   }): Promise<ServiceReport> {
     // Gera número do relatório (formato: AT-YYYY-NNN)
@@ -2146,29 +2197,35 @@ export const serviceReportsAPI = {
 
     const serviceNumber = `AT-${year}-${String((count || 0) + 1).padStart(3, '0')}`;
 
+    const insertPayload: Record<string, unknown> = {
+      job_id: report.jobId || null,
+      service_number: serviceNumber,
+      report_date: report.reportDate,
+      client_name: report.clientName.trim(),
+      start_date: report.startDate,
+      end_date: report.endDate,
+      expenses_text: report.expensesText.trim(),
+      service_type: report.serviceType,
+      anomalies: report.anomalies,
+      work_performed: report.workPerformed,
+      observations: report.observations,
+      status: report.status
+    };
+    if (report.technicianIds && report.technicianIds.length > 0) {
+      insertPayload.technician_ids = report.technicianIds;
+    }
+
     const { data: reportData, error: reportError } = await supabase
       .from('service_reports')
-      .insert({
-        job_id: report.jobId || null,
-        service_number: serviceNumber,
-        report_date: report.reportDate,
-        client_name: report.clientName.trim(),
-        start_date: report.startDate,
-        end_date: report.endDate,
-        expenses_text: report.expensesText.trim(),
-        service_type: report.serviceType,
-        anomalies: report.anomalies,
-        work_performed: report.workPerformed,
-        observations: report.observations,
-        status: report.status
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
     if (reportError) throw reportError;
 
-    if (report.document) {
-      await this.uploadDocument(reportData.id, report.document);
+    const newFiles = [...(report.documents ?? []), ...(report.document ? [report.document] : [])];
+    for (const file of newFiles) {
+      await this.uploadDocument(reportData.id, file);
     }
 
     // Insere os dias
@@ -2207,6 +2264,11 @@ export const serviceReportsAPI = {
       workPerformed?: string;
       observations?: string;
       status?: 'terminado' | 'por_terminar';
+      technicianIds?: string[];
+      /** Ficheiros novos a acrescentar (os que já existem ficam, a não ser que sejam removidos) */
+      documents?: File[];
+      /** Ids de ficheiros existentes a remover ("legacy" = o ficheiro antigo guardado na própria assistência) */
+      removeDocumentIds?: string[];
       document?: File | null;
       removeDocument?: boolean;
       days?: Array<{
@@ -2232,19 +2294,38 @@ export const serviceReportsAPI = {
     if (updates.workPerformed !== undefined) payload.work_performed = updates.workPerformed;
     if (updates.observations !== undefined) payload.observations = updates.observations;
     if (updates.status !== undefined) payload.status = updates.status;
+    if (updates.technicianIds !== undefined) payload.technician_ids = updates.technicianIds;
 
-    const { error: reportError } = await supabase
+    let { error: reportError } = await supabase
       .from('service_reports')
       .update(payload)
       .eq('id', id);
 
+    // Migração 003 ainda não executada: guarda o resto e avisa na consola
+    if (reportError && 'technician_ids' in payload && isMissingNewSchema(reportError)) {
+      console.warn('Coluna technician_ids em falta — execute a migração 003 no Supabase.');
+      delete payload.technician_ids;
+      ({ error: reportError } = await supabase
+        .from('service_reports')
+        .update(payload)
+        .eq('id', id));
+    }
+
     if (reportError) throw reportError;
 
-    if (updates.removeDocument || updates.document) {
+    if (updates.removeDocument) {
       await this.removeDocument(id);
     }
+    if (updates.removeDocumentIds && updates.removeDocumentIds.length > 0) {
+      await this.removeDocumentsByIds(id, updates.removeDocumentIds);
+    }
+    // "document" (um só) mantém o comportamento antigo: substitui o que lá estava
     if (updates.document) {
-      await this.uploadDocument(id, updates.document);
+      await this.removeDocument(id);
+    }
+    const addFiles = [...(updates.documents ?? []), ...(updates.document ? [updates.document] : [])];
+    for (const file of addFiles) {
+      await this.uploadDocument(id, file);
     }
 
     // Atualiza os dias se fornecidos
@@ -2299,7 +2380,7 @@ export const serviceReportsAPI = {
       .replace(/[^a-zA-Z0-9_-]+/g, '-')
       .replace(/^-+|-+$/g, '')
       .slice(0, 70) || 'documento';
-    const path = `${reportId}/${Date.now()}-${safeName}${extension}`;
+    const path = `${reportId}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}-${safeName}${extension}`;
 
     const { error: uploadError } = await supabase.storage
       .from('service-documents')
@@ -2314,34 +2395,140 @@ export const serviceReportsAPI = {
       .from('service-documents')
       .getPublicUrl(path);
 
+    const { error: insertError } = await supabase
+      .from('service_report_documents')
+      .insert({
+        report_id: reportId,
+        name: file.name,
+        path,
+        url: publicData.publicUrl,
+        size: file.size,
+      });
+
+    if (insertError) {
+      if (!isMissingNewSchema(insertError)) {
+        await supabase.storage.from('service-documents').remove([path]);
+        throw insertError;
+      }
+      // Sem a tabela nova (migração 003 por executar): só cabe um ficheiro, no próprio registo
+      console.warn('Tabela service_report_documents em falta — a guardar só um ficheiro. Execute a migração 003.');
+    }
+
+    await this.syncLegacyDocument(reportId, {
+      name: file.name,
+      path,
+      url: publicData.publicUrl,
+    }, !!insertError);
+  },
+
+  /** Mantém as colunas document_* (antigas) iguais ao primeiro ficheiro, para o que ainda as lê. */
+  async syncLegacyDocument(
+    reportId: string,
+    fallback?: { name: string; path: string; url: string },
+    force = false
+  ): Promise<void> {
+    let first: { name: string; path: string; url: string } | null = null;
+    if (!force) {
+      const { data, error } = await supabase
+        .from('service_report_documents')
+        .select('name,path,url,created_at')
+        .eq('report_id', reportId)
+        .order('created_at', { ascending: true })
+        .limit(1);
+      if (!error && data && data.length > 0) first = data[0];
+      else if (error && !isMissingNewSchema(error)) throw error;
+    } else {
+      first = fallback ?? null;
+    }
+
     const { error: updateError } = await supabase
       .from('service_reports')
       .update({
-        document_name: file.name,
-        document_path: path,
-        document_url: publicData.publicUrl,
+        document_name: first?.name ?? null,
+        document_path: first?.path ?? null,
+        document_url: first?.url ?? null,
       })
       .eq('id', reportId);
-
-    if (updateError) {
-      await supabase.storage.from('service-documents').remove([path]);
-      throw updateError;
-    }
+    if (updateError) throw updateError;
   },
 
+  async removeDocumentsByIds(reportId: string, ids: string[]): Promise<void> {
+    const realIds = ids.filter(x => x !== 'legacy');
+
+    if (realIds.length > 0) {
+      const { data: rows, error } = await supabase
+        .from('service_report_documents')
+        .select('id,path')
+        .eq('report_id', reportId)
+        .in('id', realIds);
+      if (error) throw error;
+
+      const paths = (rows ?? []).map(r => r.path).filter(Boolean);
+      if (paths.length > 0) {
+        const { error: storageError } = await supabase.storage
+          .from('service-documents')
+          .remove(paths);
+        if (storageError) throw storageError;
+      }
+      const { error: delError } = await supabase
+        .from('service_report_documents')
+        .delete()
+        .eq('report_id', reportId)
+        .in('id', realIds);
+      if (delError) throw delError;
+    }
+
+    if (ids.includes('legacy')) {
+      const { data } = await supabase
+        .from('service_reports')
+        .select('document_path')
+        .eq('id', reportId)
+        .maybeSingle();
+      if (data?.document_path) {
+        await supabase.storage.from('service-documents').remove([data.document_path]);
+      }
+      await supabase
+        .from('service_reports')
+        .update({ document_name: null, document_path: null, document_url: null })
+        .eq('id', reportId);
+      return;
+    }
+
+    await this.syncLegacyDocument(reportId);
+  },
+
+  /** Remove TODOS os ficheiros da assistência. */
   async removeDocument(reportId: string): Promise<void> {
+    const paths: string[] = [];
+
+    const { data: rows, error: rowsError } = await supabase
+      .from('service_report_documents')
+      .select('path')
+      .eq('report_id', reportId);
+    if (rowsError && !isMissingNewSchema(rowsError)) throw rowsError;
+    (rows ?? []).forEach(r => r.path && paths.push(r.path));
+
     const { data, error } = await supabase
       .from('service_reports')
       .select('document_path')
       .eq('id', reportId)
       .maybeSingle();
     if (error) throw error;
+    if (data?.document_path && !paths.includes(data.document_path)) paths.push(data.document_path);
 
-    if (data?.document_path) {
+    if (paths.length > 0) {
       const { error: storageError } = await supabase.storage
         .from('service-documents')
-        .remove([data.document_path]);
+        .remove(paths);
       if (storageError) throw storageError;
+    }
+
+    if (!rowsError) {
+      const { error: delError } = await supabase
+        .from('service_report_documents')
+        .delete()
+        .eq('report_id', reportId);
+      if (delError) throw delError;
     }
 
     const { error: clearError } = await supabase

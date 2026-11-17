@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useApp } from "../AppContext";
-import { serviceReportsAPI, type ServiceReport } from "../api";
+import { serviceReportsAPI, type ServiceReport, type ServiceDocument } from "../api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -16,6 +16,7 @@ import {
 } from "../components/ui/dialog";
 import {
   CalendarRange,
+  Check,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -29,6 +30,7 @@ import {
   Search,
   Trash2,
   UploadCloud,
+  Users,
   Wrench,
   X,
 } from "lucide-react";
@@ -47,6 +49,43 @@ const STATUS_OPTIONS = [
   { value: "terminado", label: "Terminados" },
   { value: "por_terminar", label: "Por terminar" },
 ] as const;
+
+const getDocuments = (report: ServiceReport): ServiceDocument[] => {
+  if (report.documents && report.documents.length > 0)
+    return report.documents;
+  // Ficheiro antigo guardado no próprio registo (antes de existirem vários ficheiros)
+  if (report.document_url)
+    return [
+      {
+        id: "legacy",
+        report_id: report.id,
+        name: report.document_name || "Documento",
+        path: report.document_path || "",
+        url: report.document_url,
+        size: null,
+        created_at: report.updated_at,
+      },
+    ];
+  return [];
+};
+
+const getTechnicianNames = (
+  report: ServiceReport,
+  users: Array<{ id: string; nome: string }>,
+): string[] =>
+  (report.technician_ids || [])
+    .map(
+      (id) =>
+        users.find((u) => String(u.id) === String(id))?.nome,
+    )
+    .filter((nome): nome is string => Boolean(nome));
+
+const formatFileSize = (bytes?: number | null) => {
+  if (!bytes) return "";
+  if (bytes < 1024 * 1024)
+    return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
+};
 
 const formatDate = (value?: string | null) => {
   if (!value) return "—";
@@ -103,19 +142,24 @@ const escapeHtml = (value?: string | null) =>
 const FRESAVE_LOGO_URL =
   "https://static.wixstatic.com/media/a7ac0c_09785672c3cb48039040f69fa2685900~mv2_d_6384_2650_s_4_2.png/v1/fill/w_200,h_78,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Fresave%20Logotipo.png";
 
-function downloadServiceReportDoc(report: ServiceReport) {
+function downloadServiceReportDoc(
+  report: ServiceReport,
+  users: Array<{ id: string; nome: string }> = [],
+) {
+  const documents = getDocuments(report);
+  const technicianNames = getTechnicianNames(report, users);
   const serviceTypeLabels = {
     avaria: "Avaria",
     preventiva: "Preventiva",
     garantia: "Ao abrigo da garantia",
   };
-  const hasDocument = Boolean(report.document_url);
+  const hasDocument = documents.length > 0;
   const generatedAt = formatDateTime(new Date().toISOString());
   const details = hasDocument
     ? `
       <div class="document-note">
-        <strong>Documento de assistência anexado</strong>
-        <p>Os detalhes técnicos constam do ficheiro “${escapeHtml(report.document_name)}”.</p>
+        <strong>${documents.length > 1 ? "Documentos de assistência anexados" : "Documento de assistência anexado"}</strong>
+        <p>Os detalhes técnicos constam de: ${documents.map((d) => `“${escapeHtml(d.name)}”`).join(", ")}.</p>
       </div>`
     : `
       <h2>O que foi gasto</h2>
@@ -163,6 +207,7 @@ function downloadServiceReportDoc(report: ServiceReport) {
         </div>
         <table class="meta">
           <tr><td class="meta-label">Cliente</td><td>${escapeHtml(getClientName(report))}</td></tr>
+          ${technicianNames.length ? `<tr><td class="meta-label">Quem foi</td><td>${escapeHtml(technicianNames.join(", "))}</td></tr>` : ""}
           ${report.job ? `<tr><td class="meta-label">Serviço / Job</td><td>${escapeHtml(report.job.reference)} — ${escapeHtml(report.job.title)}</td></tr>` : ""}
           <tr><td class="meta-label">Tipo</td><td>${serviceTypeLabels[report.service_type]}</td></tr>
           <tr><td class="meta-label">Estado</td><td>${report.status === "terminado" ? "Terminado" : "Por terminar"}</td></tr>
@@ -192,7 +237,7 @@ function downloadServiceReportDoc(report: ServiceReport) {
 }
 
 export function ServiceReportsPage() {
-  const { currentUser } = useApp();
+  const { currentUser, users } = useApp();
   const [reports, setReports] = useState<ServiceReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -202,6 +247,9 @@ export function ServiceReportsPage() {
     status: "todos" as "terminado" | "por_terminar" | "todos",
     serviceType: "todos" as
       "avaria" | "preventiva" | "garantia" | "todos",
+    technicianId: "",
+    dateFrom: "",
+    dateTo: "",
   });
   const [searchInput, setSearchInput] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -216,7 +264,15 @@ export function ServiceReportsPage() {
   const hasActiveFilters =
     filters.search !== "" ||
     filters.status !== "todos" ||
-    filters.serviceType !== "todos";
+    filters.serviceType !== "todos" ||
+    filters.technicianId !== "" ||
+    filters.dateFrom !== "" ||
+    filters.dateTo !== "";
+  const technicianOptions = [...(users || [])]
+    .filter((u: any) => u.ativo !== false)
+    .sort((a: any, b: any) =>
+      String(a.nome).localeCompare(String(b.nome), "pt"),
+    );
 
   useEffect(() => {
     loadPage();
@@ -246,6 +302,9 @@ export function ServiceReportsPage() {
             filters.serviceType !== "todos"
               ? filters.serviceType
               : undefined,
+          technicianId: filters.technicianId || undefined,
+          dateFrom: filters.dateFrom || undefined,
+          dateTo: filters.dateTo || undefined,
         },
       );
       setReports(result.reports);
@@ -268,6 +327,9 @@ export function ServiceReportsPage() {
       search: "",
       status: "todos",
       serviceType: "todos",
+      technicianId: "",
+      dateFrom: "",
+      dateTo: "",
     });
     setPage(1);
   };
@@ -366,15 +428,15 @@ export function ServiceReportsPage() {
               </button>
             ))}
           </div>
-          <div className="grid gap-2 sm:grid-cols-[1fr_auto_auto]">
-            <div className="relative">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[1fr_auto_auto_auto_auto_auto]">
+            <div className="relative sm:col-span-2 xl:col-span-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
               <Input
                 value={searchInput}
                 onChange={(event) =>
                   setSearchInput(event.target.value)
                 }
-                placeholder="Pesquisar por cliente ou número"
+                placeholder="Pesquisar por cliente, número ou observações"
                 className="pl-9"
               />
             </div>
@@ -395,6 +457,44 @@ export function ServiceReportsPage() {
                 </option>
               ))}
             </select>
+            <select
+              value={filters.technicianId}
+              onChange={(event) =>
+                changeFilter({ technicianId: event.target.value })
+              }
+              className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              <option value="">Todos Func.</option>
+              {technicianOptions.map((u: any) => (
+                <option key={u.id} value={u.id}>
+                  {u.nome}
+                </option>
+              ))}
+            </select>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>De</span>
+              <Input
+                type="date"
+                value={filters.dateFrom}
+                max={filters.dateTo || undefined}
+                onChange={(event) =>
+                  changeFilter({ dateFrom: event.target.value })
+                }
+                className="h-9 min-w-[9.5rem]"
+              />
+            </label>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Até</span>
+              <Input
+                type="date"
+                value={filters.dateTo}
+                min={filters.dateFrom || undefined}
+                onChange={(event) =>
+                  changeFilter({ dateTo: event.target.value })
+                }
+                className="h-9 min-w-[9.5rem]"
+              />
+            </label>
             {hasActiveFilters && (
               <Button
                 type="button"
@@ -425,8 +525,9 @@ export function ServiceReportsPage() {
                   setCreateOpen(true);
                 }}
                 onDelete={() => handleDelete(report.id)}
+                users={users || []}
                 onDownload={() =>
-                  downloadServiceReportDoc(report)
+                  downloadServiceReportDoc(report, users || [])
                 }
               />
             ))}
@@ -491,8 +592,10 @@ function ReportRow({
   onEdit,
   onDelete,
   onDownload,
+  users,
 }: {
   report: ServiceReport;
+  users: Array<{ id: string; nome: string }>;
   canEdit: boolean;
   onEdit: () => void;
   onDelete: () => void;
@@ -503,6 +606,8 @@ function ReportRow({
     preventiva: "Preventiva",
     garantia: "Garantia",
   };
+  const documents = getDocuments(report);
+  const technicianNames = getTechnicianNames(report, users);
   return (
     <div className="p-5">
       <div className="flex gap-3">
@@ -531,10 +636,12 @@ function ReportRow({
               )}
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
-              {report.document_url && (
+              {documents.length > 0 && (
                 <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400">
                   <Paperclip className="mr-1 h-3 w-3" />{" "}
-                  Documento
+                  {documents.length === 1
+                    ? "1 ficheiro"
+                    : `${documents.length} ficheiros`}
                 </Badge>
               )}
               <Badge className="border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
@@ -551,23 +658,6 @@ function ReportRow({
                   ? "Terminado"
                   : "Por terminar"}
               </Badge>
-              {report.document_url && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-zinc-400"
-                  asChild
-                >
-                  <a
-                    href={report.document_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="Abrir documento anexado"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                </Button>
-              )}
               <Button
                 variant="ghost"
                 size="icon"
@@ -607,12 +697,36 @@ function ReportRow({
               {formatDate(getReportStart(report))} —{" "}
               {formatDate(getReportEnd(report))}
             </span>
-            {!report.document_url && report.expenses_text && (
+            {technicianNames.length > 0 && (
+              <span className="flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5 text-red-500" />
+                {technicianNames.join(", ")}
+              </span>
+            )}
+            {documents.length === 0 && report.expenses_text && (
               <span className="line-clamp-1 max-w-xl">
                 Gasto: {report.expenses_text}
               </span>
             )}
           </div>
+          {documents.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {documents.map((doc) => (
+                <a
+                  key={doc.id}
+                  href={doc.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={doc.name}
+                  className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-red-300 hover:text-red-600"
+                >
+                  <Paperclip className="h-3 w-3 shrink-0 text-red-500" />
+                  <span className="truncate">{doc.name}</span>
+                  <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -629,9 +743,12 @@ function ServiceReportForm({
   onSaved: () => Promise<void>;
 }) {
   const [saving, setSaving] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [removeExistingDocument, setRemoveExistingDocument] =
-    useState(false);
+  const { users } = useApp();
+  const [files, setFiles] = useState<File[]>([]);
+  const [removedDocIds, setRemovedDocIds] = useState<string[]>([]);
+  const [technicianIds, setTechnicianIds] = useState<string[]>(
+    (report?.technician_ids || []).map(String),
+  );
   const [form, setForm] = useState({
     jobId: report?.job_id || "",
     clientName: report ? getClientName(report) : "",
@@ -653,19 +770,47 @@ function ServiceReportForm({
       ("por_terminar" as "terminado" | "por_terminar"),
   });
 
-  const hasExistingDocument =
-    Boolean(report?.document_url) && !removeExistingDocument;
-  const hasDocument = Boolean(file) || hasExistingDocument;
+  const existingDocs = report
+    ? getDocuments(report).filter((d) => !removedDocIds.includes(d.id))
+    : [];
+  const hasDocument = files.length > 0 || existingDocs.length > 0;
+  const technicianOptions = [...(users || [])]
+    .filter(
+      (u: any) =>
+        u.ativo !== false || technicianIds.includes(String(u.id)),
+    )
+    .sort((a: any, b: any) =>
+      String(a.nome).localeCompare(String(b.nome), "pt"),
+    );
+  const toggleTechnician = (id: string) =>
+    setTechnicianIds((current) =>
+      current.includes(id)
+        ? current.filter((x) => x !== id)
+        : [...current, id],
+    );
   const update = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
 
-  const selectFile = (selected: File | null) => {
-    if (!selected) return;
-    if (selected.size > MAX_FILE_SIZE) {
-      alert("O documento não pode ultrapassar 15 MB.");
-      return;
-    }
-    setFile(selected);
+  const selectFiles = (selected: FileList | null) => {
+    if (!selected || selected.length === 0) return;
+    const accepted: File[] = [];
+    const tooBig: string[] = [];
+    Array.from(selected).forEach((f) => {
+      if (f.size > MAX_FILE_SIZE) tooBig.push(f.name);
+      else accepted.push(f);
+    });
+    if (tooBig.length > 0)
+      alert(
+        `Não pode ultrapassar 15 MB por ficheiro:\n${tooBig.join("\n")}`,
+      );
+    if (accepted.length === 0) return;
+    setFiles((current) => {
+      const known = new Set(current.map((f) => `${f.name}|${f.size}`));
+      return [
+        ...current,
+        ...accepted.filter((f) => !known.has(`${f.name}|${f.size}`)),
+      ];
+    });
   };
 
   async function submit(event: React.FormEvent) {
@@ -708,7 +853,8 @@ function ServiceReportForm({
       observations: form.observations,
       status: form.status,
       days: [],
-      document: file,
+      technicianIds,
+      documents: files,
     };
 
     try {
@@ -716,7 +862,7 @@ function ServiceReportForm({
         await serviceReportsAPI.update(report.id, {
           ...payload,
           jobId: form.jobId || null,
-          removeDocument: removeExistingDocument,
+          removeDocumentIds: removedDocIds,
         });
       } else {
         await serviceReportsAPI.create(payload);
@@ -790,6 +936,56 @@ function ServiceReportForm({
         </div>
       </section>
 
+      <section className="rounded-xl border border-border p-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <Users className="h-4 w-4 text-red-500" /> Quem foi
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Facultativo — escolha uma ou mais pessoas que fizeram
+              a assistência.
+            </p>
+          </div>
+          {technicianIds.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setTechnicianIds([])}
+              className="text-xs text-muted-foreground underline-offset-2 hover:text-red-600 hover:underline"
+            >
+              Limpar ({technicianIds.length})
+            </button>
+          )}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {technicianOptions.map((u: any) => {
+            const id = String(u.id);
+            const selected = technicianIds.includes(id);
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => toggleTechnician(id)}
+                aria-pressed={selected}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  selected
+                    ? "border-red-600 bg-red-600 text-white"
+                    : "border-border bg-muted/50 text-foreground hover:border-red-300"
+                }`}
+              >
+                {selected && <Check className="h-3.5 w-3.5" />}
+                {u.nome}
+              </button>
+            );
+          })}
+          {technicianOptions.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Não há utilizadores para escolher.
+            </p>
+          )}
+        </div>
+      </section>
+
       <section
         className={`rounded-xl border p-4 transition-colors ${hasDocument ? "border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/20" : "border-dashed border-zinc-300 dark:border-zinc-700"}`}
       >
@@ -805,62 +1001,89 @@ function ServiceReportForm({
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-zinc-800 dark:text-zinc-100">
-              Documento da assistência
+              Ficheiros da assistência
             </p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              Com documento, os detalhes técnicos deixam de ser
-              obrigatórios. Aceita PDF, Word, Excel e imagens
-              até 15 MB.
+              Pode anexar vários ficheiros. Com pelo menos um, os
+              detalhes técnicos deixam de ser obrigatórios. Aceita
+              PDF, Word, Excel e imagens, até 15 MB cada.
             </p>
-            {hasExistingDocument && !file && (
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
-                <a
-                  href={report?.document_url || "#"}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center gap-1.5 font-medium text-emerald-700 hover:underline dark:text-emerald-400"
-                >
-                  <Paperclip className="h-3.5 w-3.5" />{" "}
-                  {report?.document_name || "Documento atual"}
-                </a>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setRemoveExistingDocument(true)
-                  }
-                  className="text-zinc-500 underline-offset-2 hover:text-red-600 hover:underline"
-                >
-                  Remover
-                </button>
-              </div>
+
+            {(existingDocs.length > 0 || files.length > 0) && (
+              <ul className="mt-3 space-y-1.5">
+                {existingDocs.map((doc) => (
+                  <li
+                    key={doc.id}
+                    className="flex items-center gap-2 text-xs"
+                  >
+                    <Paperclip className="h-3.5 w-3.5 shrink-0 text-emerald-700 dark:text-emerald-400" />
+                    <a
+                      href={doc.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="truncate font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+                    >
+                      {doc.name}
+                    </a>
+                    {doc.size ? (
+                      <span className="shrink-0 text-muted-foreground">
+                        {formatFileSize(doc.size)}
+                      </span>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setRemovedDocIds((current) => [
+                          ...current,
+                          doc.id,
+                        ])
+                      }
+                      className="ml-auto shrink-0 text-zinc-500 underline-offset-2 hover:text-red-600 hover:underline"
+                    >
+                      Remover
+                    </button>
+                  </li>
+                ))}
+                {files.map((f, index) => (
+                  <li
+                    key={`${f.name}-${f.size}-${index}`}
+                    className="flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-400"
+                  >
+                    <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{f.name}</span>
+                    <span className="shrink-0 font-normal text-muted-foreground">
+                      {formatFileSize(f.size)} · novo
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setFiles((current) =>
+                          current.filter((_, i) => i !== index),
+                        )
+                      }
+                      className="ml-auto shrink-0 font-normal text-zinc-500 hover:text-red-600"
+                    >
+                      Remover
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
-            {file && (
-              <div className="mt-3 flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                <Paperclip className="h-3.5 w-3.5" />
-                <span className="truncate">{file.name}</span>
-                <button
-                  type="button"
-                  onClick={() => setFile(null)}
-                  className="ml-auto text-zinc-500 hover:text-red-600"
-                >
-                  Remover
-                </button>
-              </div>
-            )}
-            {!hasDocument && (
-              <label className="mt-3 inline-flex h-9 cursor-pointer items-center rounded-md border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800">
-                <UploadCloud className="mr-2 h-4 w-4" />{" "}
-                Escolher documento
-                <input
-                  type="file"
-                  className="sr-only"
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp"
-                  onChange={(event) =>
-                    selectFile(event.target.files?.[0] || null)
-                  }
-                />
-              </label>
-            )}
+
+            <label className="mt-3 inline-flex h-9 cursor-pointer items-center rounded-md border border-zinc-200 bg-white px-3 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800">
+              <UploadCloud className="mr-2 h-4 w-4" />{" "}
+              {hasDocument ? "Adicionar mais ficheiros" : "Escolher ficheiros"}
+              <input
+                type="file"
+                multiple
+                className="sr-only"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.webp"
+                onChange={(event) => {
+                  selectFiles(event.target.files);
+                  event.target.value = "";
+                }}
+              />
+            </label>
           </div>
         </div>
       </section>
