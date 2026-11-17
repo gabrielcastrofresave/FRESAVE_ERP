@@ -2,94 +2,80 @@
 
 :root {
   --font-size: 15px;
-
-  /* ── Light palette ── */
-  --background: #f5f6fa;
-  --foreground: #0f172a;
+  --background: #f3f6fb;
+  --foreground: #10213f;
   --card: #ffffff;
-  --card-foreground: #0f172a;
+  --card-foreground: #10213f;
   --popover: #ffffff;
-  --popover-foreground: #0f172a;
-
+  --popover-foreground: #10213f;
   --primary: #1e40af;
   --primary-foreground: #ffffff;
-
-  --secondary: #e8edf7;
-  --secondary-foreground: #1e3a8a;
-
-  --muted: #eef0f5;
-  --muted-foreground: #64748b;
-
-  --accent: #dbeafe;
-  --accent-foreground: #1e3a8a;
-
-  --destructive: #dc2626;
+  --secondary: #e8eef8;
+  --secondary-foreground: #173b8f;
+  --muted: #eef2f7;
+  --muted-foreground: #66758f;
+  --accent: #fff4d6;
+  --accent-foreground: #8a4b08;
+  --destructive: #c93636;
   --destructive-foreground: #ffffff;
-
-  --border: #e2e8f0;
-  --input: transparent;
-  --input-background: #f1f4f9;
-  --switch-background: #cbd5e1;
-
-  --ring: #93c5fd;
-
-  --chart-1: #3b82f6;
-  --chart-2: #10b981;
+  --border: #dce5f0;
+  --input: #dce5f0;
+  --input-background: #f8fafc;
+  --switch-background: #c4cfdf;
+  --ring: #8fb3ff;
+  --chart-1: #2563eb;
+  --chart-2: #0f9f78;
   --chart-3: #f59e0b;
-  --chart-4: #8b5cf6;
-  --chart-5: #ef4444;
-
-  --radius: 0.6rem;
-
-  --sidebar: #1e293b;
-  --sidebar-foreground: #e2e8f0;
-  --sidebar-primary: #3b82f6;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #334155;
-  --sidebar-accent-foreground: #f1f5f9;
-  --sidebar-border: #334155;
-  --sidebar-ring: #3b82f6;
-
-  /* font weights */
+  --chart-4: #6d5ce7;
+  --chart-5: #dc4a4a;
+  --radius: 0.8rem;
+  --sidebar: #0f1f3b;
+  --sidebar-foreground: #dbe7fb;
+  --sidebar-primary: #f7b32b;
+  --sidebar-primary-foreground: #17233b;
+  --sidebar-accent: #1a3158;
+  --sidebar-accent-foreground: #f5f8ff;
+  --sidebar-border: rgba(185, 208, 242, 0.13);
+  --sidebar-ring: #f7b32b;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
 }
 
 .dark {
-  --background: #09090b;
-  --foreground: #e4e4e7;
-  --card: #18181b;
-  --card-foreground: #e4e4e7;
-  --popover: #18181b;
-  --popover-foreground: #e4e4e7;
-  --primary: #ef4444;
+  --background: #091326;
+  --foreground: #e8effb;
+  --card: #101d33;
+  --card-foreground: #e8effb;
+  --popover: #14233c;
+  --popover-foreground: #e8effb;
+  --primary: #5b8cff;
   --primary-foreground: #ffffff;
-  --secondary: #27272a;
-  --secondary-foreground: #e4e4e7;
-  --muted: #27272a;
-  --muted-foreground: #a1a1aa;
-  --accent: #3f1d1d;
-  --accent-foreground: #fca5a5;
-  --destructive: #b91c1c;
-  --destructive-foreground: #fca5a5;
-  --border: #27272a;
-  --input: #27272a;
-  --input-background: #27272a;
-  --switch-background: #3f3f46;
-  --ring: #ef4444;
-  --chart-1: #ef4444;
-  --chart-2: #e4e4e7;
-  --chart-3: #a1a1aa;
-  --chart-4: #fca5a5;
-  --chart-5: #71717a;
-  --sidebar: #09090b;
-  --sidebar-foreground: #a1a1aa;
-  --sidebar-primary: #ef4444;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #27272a;
-  --sidebar-accent-foreground: #f4f4f5;
-  --sidebar-border: #27272a;
-  --sidebar-ring: #ef4444;
+  --secondary: #172945;
+  --secondary-foreground: #d9e5ff;
+  --muted: #15243b;
+  --muted-foreground: #92a4c1;
+  --accent: #3c2d12;
+  --accent-foreground: #ffd37a;
+  --destructive: #ef6868;
+  --destructive-foreground: #220b0b;
+  --border: #223654;
+  --input: #223654;
+  --input-background: #12223a;
+  --switch-background: #385071;
+  --ring: #719aff;
+  --chart-1: #6f9bff;
+  --chart-2: #38c89e;
+  --chart-3: #f7b32b;
+  --chart-4: #a797ff;
+  --chart-5: #ff7777;
+  --sidebar: #071224;
+  --sidebar-foreground: #dbe7fb;
+  --sidebar-primary: #f7b32b;
+  --sidebar-primary-foreground: #17233b;
+  --sidebar-accent: #12243f;
+  --sidebar-accent-foreground: #f5f8ff;
+  --sidebar-border: rgba(185, 208, 242, 0.14);
+  --sidebar-ring: #f7b32b;
   --font-weight-medium: 500;
   --font-weight-normal: 400;
 }
@@ -128,86 +114,30 @@
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(
-    --sidebar-primary-foreground
-  );
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(
-    --sidebar-accent-foreground
-  );
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-
+  * { @apply border-border outline-ring/50; }
+  html { font-size: var(--font-size); }
   body {
     @apply bg-background text-foreground;
-    font-family:
-      "Inter",
-      "Plus Jakarta Sans",
-      system-ui,
-      -apple-system,
-      sans-serif;
+    font-family: "Inter", "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-variant-numeric: tabular-nums;
   }
-
-  html {
-    font-size: var(--font-size);
-  }
-
-  h1 {
-    font-size: var(--text-2xl);
-    font-weight: 600;
-    line-height: 1.3;
-    letter-spacing: -0.02em;
-  }
-
-  h2 {
-    font-size: var(--text-xl);
-    font-weight: 600;
-    line-height: 1.4;
-    letter-spacing: -0.01em;
-  }
-
-  h3 {
-    font-size: var(--text-lg);
-    font-weight: 500;
-    line-height: 1.5;
-  }
-
-  h4 {
-    font-size: var(--text-base);
-    font-weight: 500;
-    line-height: 1.5;
-  }
-
-  label {
-    font-size: var(--text-sm);
-    font-weight: 500;
-    line-height: 1.5;
-  }
-
-  button {
-    font-size: var(--text-sm);
-    font-weight: 500;
-    line-height: 1.5;
-  }
-
-  input {
-    font-size: var(--text-sm);
-    font-weight: 400;
-    line-height: 1.5;
-  }
-
-  /* Fix modal/dialog z-index for older Chrome stacking context issues */
-  [data-radix-popper-content-wrapper],
-  [data-radix-dialog-overlay],
-  [data-radix-dialog-content] {
-    z-index: 9999 !important;
-  }
+  h1 { font-size: var(--text-2xl); font-weight: 700; line-height: 1.2; letter-spacing: -0.03em; }
+  h2 { font-size: var(--text-xl); font-weight: 650; line-height: 1.3; letter-spacing: -0.02em; }
+  h3 { font-size: var(--text-lg); font-weight: 600; line-height: 1.4; }
+  h4 { font-size: var(--text-base); font-weight: 600; line-height: 1.5; }
+  label { font-size: var(--text-sm); font-weight: 600; line-height: 1.5; }
+  button, input, select, textarea { font-size: var(--text-sm); line-height: 1.5; }
+  button { font-weight: 600; }
+  :focus-visible { outline: 3px solid color-mix(in srgb, var(--ring) 70%, transparent); outline-offset: 2px; }
+  [data-radix-popper-content-wrapper], [data-radix-dialog-overlay], [data-radix-dialog-content] { z-index: 9999 !important; }
 }

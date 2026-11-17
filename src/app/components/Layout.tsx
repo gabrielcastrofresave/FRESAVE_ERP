@@ -218,6 +218,13 @@ export function Layout({
         g.roles.includes(currentUser.role),
       )
     : [];
+  const mobileNavItems = filteredGroups
+    .map((group) => ({
+      id: group.items.length === 1 ? group.items[0].id : group.id,
+      label: group.items.length === 1 ? group.items[0].label : group.label,
+      icon: group.items.length === 1 ? group.items[0].icon : group.icon,
+    }))
+    .slice(0, 4);
 
   const getRoleLabel = (role: string) => {
     const labels: Record<string, string> = {
@@ -349,8 +356,8 @@ export function Layout({
                   }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group ${
                     isActive
-                      ? "bg-blue-600 text-white shadow-sm"
-                      : "text-slate-400 hover:text-slate-200 hover:bg-white/8"
+                      ? "bg-amber-400 text-slate-950 shadow-[0_8px_18px_rgba(247,179,43,0.18)]"
+                      : "text-slate-400 hover:text-white hover:bg-white/[0.08]"
                   }`}
                 >
                   <GroupIcon
@@ -372,8 +379,8 @@ export function Layout({
                     onClick={() => toggleGroup(group.id)}
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group ${
                       isActive || isExpanded
-                        ? "text-slate-200 bg-white/8"
-                        : "text-slate-400 hover:text-slate-200 hover:bg-white/5"
+                        ? "text-white bg-white/[0.08]"
+                        : "text-slate-400 hover:text-white hover:bg-white/[0.06]"
                     }`}
                   >
                     <GroupIcon
@@ -404,7 +411,7 @@ export function Layout({
                             }}
                             className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
                               itemActive
-                                ? "bg-blue-600 text-white font-medium"
+                                ? "bg-blue-600/90 text-white font-medium shadow-sm"
                                 : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
                             }`}
                           >
@@ -490,7 +497,7 @@ export function Layout({
     <div className="min-h-screen bg-background flex">
       {/* Desktop sidebar */}
       <aside
-        className="hidden lg:flex lg:flex-col w-64 xl:w-72 sticky top-0 h-screen flex-shrink-0"
+        className="hidden lg:flex lg:flex-col w-64 xl:w-72 sticky top-0 h-screen flex-shrink-0 shadow-[12px_0_40px_rgba(7,18,36,0.08)]"
         style={{ background: "var(--sidebar)" }}
       >
         <SidebarContent dark />
@@ -545,7 +552,7 @@ export function Layout({
         <header className="lg:hidden bg-card border-b border-border px-4 py-3 flex items-center justify-between sticky top-0 z-40">
           <button
             onClick={() => setIsSidebarOpen(true)}
-            className="p-2 -ml-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            className="erp-touch-target -ml-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
             <Menu className="w-5 h-5" />
           </button>
@@ -562,9 +569,16 @@ export function Layout({
           <NotificationCenter />
         </header>
 
-        <main className="flex-1 p-4 sm:p-5 md:p-6 lg:p-7 xl:p-8 bg-[#18181b00]">
-          <div className="w-full max-full">{children}</div>
+        <main className="flex-1 p-3 pb-20 sm:p-5 sm:pb-20 md:p-6 md:pb-20 lg:p-7 lg:pb-7 xl:p-8 bg-background">
+          <div className="mx-auto w-full max-w-[1600px]">{children}</div>
         </main>
+        <nav aria-label="Navegação rápida" className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-border bg-card/95 px-2 py-2 shadow-[0_-8px_24px_rgba(15,31,59,0.08)] backdrop-blur lg:hidden">
+          {mobileNavItems.map((item) => {
+            const Icon = item.icon;
+            const active = currentPage === item.id;
+            return <button key={item.id} type="button" onClick={() => onNavigate(item.id)} className={`erp-touch-target flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] transition-colors ${active ? "text-blue-700 dark:text-blue-300" : "text-muted-foreground"}`} aria-current={active ? "page" : undefined}><Icon className={`h-4 w-4 ${active ? "text-amber-500" : ""}`} /><span className="max-w-full truncate">{item.label}</span></button>;
+          })}
+        </nav>
       </div>
     </div>
   );

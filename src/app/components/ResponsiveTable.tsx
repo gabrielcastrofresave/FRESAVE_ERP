@@ -7,11 +7,9 @@ interface ResponsiveTableProps {
 
 export function ResponsiveTable({ children, className = "" }: ResponsiveTableProps) {
   return (
-    <div className={`w-full overflow-x-auto -mx-3 sm:mx-0 ${className}`}>
+    <div className={`table-responsive rounded-xl border border-border bg-card ${className}`}>
       <div className="inline-block min-w-full align-middle">
-        <div className="overflow-hidden">
-          {children}
-        </div>
+        <div className="overflow-hidden rounded-xl">{children}</div>
       </div>
     </div>
   );

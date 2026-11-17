@@ -1,110 +1,42 @@
-/* Estilos globais de responsividade para a aplicação */
+/* Base mobile-first do FRESAVE ERP. Os fluxos e dados continuam a ser os mesmos. */
 
-/* ===================================
-   TABELAS RESPONSIVAS
-   =================================== */
+html, body, #root { min-height: 100%; }
+body { overflow-x: hidden; }
 
-/* Garantir que tabelas rolam horizontalmente em mobile */
-.table-responsive {
-  @apply w-full overflow-x-auto;
-}
+.table-responsive { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-responsive table { min-width: 640px; }
 
-/* Tornar células de tabela mais compactas em mobile */
-@media (max-width: 640px) {
-  table {
-    @apply text-sm;
-  }
-  
-  th, td {
-    @apply px-2 py-2;
-  }
-}
-
-/* ===================================
-   MODAIS RESPONSIVOS
-   =================================== */
-
-/* Garantir que modais não excedam a altura da tela em mobile */
 @media (max-width: 768px) {
   [role="dialog"] {
-    @apply max-h-[90vh] overflow-y-auto;
-    margin: 1rem !important;
-    max-width: calc(100vw - 2rem) !important;
+    width: calc(100vw - 1rem) !important;
+    max-width: calc(100vw - 1rem) !important;
+    max-height: calc(100dvh - 1rem) !important;
+    margin: 0.5rem !important;
+    overflow-y: auto;
+    border-radius: 1.15rem !important;
   }
+
+  [role="dialog"] form { padding-bottom: env(safe-area-inset-bottom); }
+  .mobile-bottom-nav { padding-bottom: max(0.65rem, env(safe-area-inset-bottom)); }
 }
 
-/* ===================================
-   BOTÕES RESPONSIVOS
-   =================================== */
-
-/* Botões com ícones ficam mais compactos em mobile */
 @media (max-width: 640px) {
-  button {
-    @apply text-sm;
-  }
-  
-  button svg {
-    @apply w-4 h-4;
-  }
+  button, [role="button"], a { min-height: 44px; }
+  button svg, [role="button"] svg { width: 1rem; height: 1rem; }
+  input, select, textarea { min-height: 44px; }
+  table { font-size: 0.8125rem; }
+  th, td { padding: 0.6rem 0.55rem; }
+  .card { padding: 0.9rem; }
 }
 
-/* ===================================
-   FORMS RESPONSIVOS
-   =================================== */
+/* Utilitários de composição usados pelos módulos à medida que são redesenhados. */
+.erp-surface { border: 1px solid var(--border); background: var(--card); border-radius: 1rem; box-shadow: 0 10px 30px rgba(16, 33, 63, 0.045); }
+.dark .erp-surface { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14); }
+.erp-eyebrow { color: #b26a0b; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+.dark .erp-eyebrow { color: #f7c45e; }
+.erp-tabular { font-variant-numeric: tabular-nums; }
+.erp-touch-target { min-width: 44px; min-height: 44px; }
 
-/* Labels e inputs mais compactos em mobile */
-@media (max-width: 640px) {
-  label {
-    @apply text-sm;
-  }
-  
-  input, select, textarea {
-    @apply text-sm;
-  }
-}
-
-/* ===================================
-   CARDS RESPONSIVOS
-   =================================== */
-
-/* Cards com padding reduzido em mobile */
-@media (max-width: 640px) {
-  .card {
-    @apply p-3;
-  }
-}
-
-/* ===================================
-   UTILITÁRIOS
-   =================================== */
-
-/* Esconder elementos em mobile */
-.hide-mobile {
-  @apply hidden sm:block;
-}
-
-/* Mostrar apenas em mobile */
-.show-mobile {
-  @apply block sm:hidden;
-}
-
-/* Texto responsivo */
-.text-responsive {
-  @apply text-sm md:text-base;
-}
-
-.text-responsive-lg {
-  @apply text-base md:text-lg lg:text-xl;
-}
-
-/* ===================================
-   SCROLLBARS CUSTOMIZADOS
-   =================================== */
-
-/* Scrollbar mais fino em mobile */
-@media (max-width: 768px) {
-  ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
-  }
-}
+.hide-mobile { display: none; }
+.show-mobile { display: block; }
+@media (min-width: 640px) { .hide-mobile { display: block; } .show-mobile { display: none; } }

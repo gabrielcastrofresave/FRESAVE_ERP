@@ -45,7 +45,7 @@ import {
 
 // ==================== CONSTANTES (fora do componente) ====================
 const CARD =
-  "overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900";
+  "erp-surface overflow-hidden";
 
 const FLEET_STATUSES = [
   "disponivel",
@@ -503,18 +503,18 @@ export function DashboardPage() {
   }, [loadJobs]);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-7">
+    <div className="mx-auto max-w-[1500px] space-y-6 sm:space-y-7">
       {/* Header */}
-      <header className="flex flex-col gap-4 border-b border-zinc-200 pb-6 dark:border-zinc-800 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex flex-col gap-5 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-red-600">
+          <p className="text-xs font-semibold tracking-[0.14em] text-amber-600 dark:text-amber-300">
             VISÃO GERAL
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Olá,{" "}
             {currentUser?.nome?.split(" ")[0] || "bem-vindo"}
           </h1>
-          <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-zinc-400">
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
             Aqui tens um resumo rápido da frota, equipamentos,
             stock e trabalhos em curso.
           </p>
@@ -523,14 +523,14 @@ export function DashboardPage() {
           <Button
             variant="outline"
             onClick={() => setTrackOpen(true)}
-            className="h-10"
+            className="h-11"
           >
             <Search className="mr-2 h-4 w-4" />
             Ver Estado da Encomenda
           </Button>
           <Button
             onClick={() => setRegisterOpen(true)}
-            className="h-10 bg-red-600 text-white hover:bg-red-700"
+            className="h-11 bg-blue-700 text-white shadow-lg shadow-blue-700/15 hover:bg-blue-800"
           >
             <ClipboardPlus className="mr-2 h-4 w-4" />
             Registar Atividade
@@ -539,13 +539,13 @@ export function DashboardPage() {
       </header>
 
       {/* KPIs */}
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => {
           const Icon = stat.icon;
           return (
             <div
               key={stat.label}
-              className="flex items-center gap-4 rounded-xl border border-zinc-200 bg-white px-5 py-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+              className="flex items-center gap-4 rounded-xl border erp-surface px-5 py-4"
             >
               <div
                 className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${stat.tone}`}
@@ -589,7 +589,7 @@ export function DashboardPage() {
               Os Meus Projetos
             </h2>
           </div>
-          <div className="grid gap-4 p-5 lg:grid-cols-2">
+          <div className="grid gap-3 p-4 sm:p-5 lg:grid-cols-2">
             {myJobs.map((job: any) => (
               <JobProgressCard
                 key={job.id}
@@ -681,7 +681,7 @@ export function DashboardPage() {
             <span>Camiões, viaturas e restante frota</span>
           </div>
         </div>
-        <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5 lg:grid-cols-4">
           {FLEET_STATUSES.map((status) => (
             <div
               key={status}
@@ -790,7 +790,7 @@ function TrackLookupForm({ onClose }: { onClose: () => void }) {
         </Button>
         <Button
           type="submit"
-          className="bg-red-600 hover:bg-red-700"
+          className="bg-blue-700 hover:bg-blue-800"
           disabled={loading}
         >
           {loading && (
@@ -858,7 +858,7 @@ function QuickRegisterForm({
           required
         />
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="qr-cliente">Cliente / Obra</Label>
           <Input
@@ -878,7 +878,7 @@ function QuickRegisterForm({
           />
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="qr-inicio">Hora Início</Label>
           <Input
@@ -910,7 +910,7 @@ function QuickRegisterForm({
         </Button>
         <Button
           type="submit"
-          className="bg-red-600 hover:bg-red-700"
+          className="bg-blue-700 hover:bg-blue-800"
           disabled={loading}
         >
           {loading && (
