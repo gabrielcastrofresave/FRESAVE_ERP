@@ -1,5 +1,5 @@
 import image_logo_2 from "./logo.png";
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { useApp } from "../AppContext";
 import { NotificationCenter } from "./NotificationCenter";
 import {
@@ -220,11 +220,19 @@ export function Layout({
     : [];
   const mobileNavItems = filteredGroups
     .map((group) => ({
-      id: group.items.length === 1 ? group.items[0].id : group.id,
+      // página para onde vai: a própria, ou a primeira do grupo
+      id: group.items.length === 0 ? group.id : group.items[0].id,
+      ids: group.items.length === 0 ? [group.id] : group.items.map((i) => i.id),
       label: group.items.length === 1 ? group.items[0].label : group.label,
       icon: group.items.length === 1 ? group.items[0].icon : group.icon,
-    }))
-    .slice(0, 4);
+    }));
+
+  // Mantém o separador ativo visível na barra de baixo (que desliza para o lado)
+  useEffect(() => {
+    const el = document.querySelector('.mobile-bottom-nav [aria-current="page"]');
+    if (el && "scrollIntoView" in el)
+      (el as HTMLElement).scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+  }, [currentPage]);
 
   const getRoleLabel = (role: string) => {
     const labels: Record<string, string> = {
@@ -573,11 +581,11 @@ export function Layout({
         <main className="flex-1 p-3 pb-20 sm:p-5 sm:pb-20 md:p-6 md:pb-20 lg:p-7 lg:pb-7 xl:p-8 bg-background">
           <div className="mx-auto w-full max-w-[1600px]">{children}</div>
         </main>
-        <nav aria-label="Navegação rápida" className="mobile-bottom-nav erp-glass fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 flex items-center justify-around rounded-[1.75rem] border border-border/60 px-2 py-2 shadow-[0_10px_40px_rgba(0,0,0,0.18)] lg:hidden">
+        <nav aria-label="Navegação rápida" className="mobile-bottom-nav erp-glass fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 flex items-center gap-1 overflow-x-auto overscroll-x-contain snap-x snap-proximity [scrollbar-width:none] [&::-webkit-scrollbar]:hidden rounded-[1.75rem] border border-border/60 px-2 py-2 shadow-[0_10px_40px_rgba(0,0,0,0.18)] lg:hidden">
           {mobileNavItems.map((item) => {
             const Icon = item.icon;
-            const active = currentPage === item.id;
-            return <button key={item.id} type="button" onClick={() => onNavigate(item.id)} className={`erp-touch-target flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] transition-colors ${active ? "bg-red-500/10 text-red-600 dark:text-red-300" : "text-muted-foreground"}`} aria-current={active ? "page" : undefined}><Icon className={`h-4 w-4 ${active ? "text-red-500" : ""}`} /><span className="max-w-full truncate">{item.label}</span></button>;
+            const active = item.ids.includes(currentPage);
+            return <button key={item.id} type="button" onClick={() => onNavigate(item.id)} className={`erp-touch-target flex min-w-[4.75rem] flex-none snap-start flex-col items-center justify-center gap-0.5 rounded-2xl px-2 text-[10px] transition-colors ${active ? "bg-red-500/10 text-red-600 dark:text-red-300" : "text-muted-foreground"}`} aria-current={active ? "page" : undefined}><Icon className={`h-4 w-4 ${active ? "text-red-500" : ""}`} /><span className="max-w-full truncate">{item.label}</span></button>;
           })}
         </nav>
       </div>
