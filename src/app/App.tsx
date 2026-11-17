@@ -21,6 +21,7 @@ import { ProductionCalendarPage } from "./pages/ProductionCalendarPage";
 import { useApp } from "./AppContext";
 import { AppProvider } from "./AppContext";
 import { ThemeProvider } from "next-themes";
+import { PageTransition } from "./components/PageTransition";
 
 function AppContent() {
   const { currentUser, loading } = useApp();
@@ -80,7 +81,7 @@ function AppContent() {
       currentPage={currentPage}
       onNavigate={setCurrentPage}
     >
-      {renderPage()}
+      <PageTransition key={currentPage}>{renderPage()}</PageTransition>
     </Layout>
   );
 }

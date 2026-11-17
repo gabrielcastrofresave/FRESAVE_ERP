@@ -357,7 +357,7 @@ export function Layout({
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group ${
                     isActive
                       ? "bg-red-600 text-white shadow-[0_8px_18px_rgba(220,38,38,0.25)]"
-                      : "text-zinc-400 hover:text-white hover:bg-white/[0.08]"
+                      : "text-zinc-400 hover:text-white hover:bg-white/[0.08] hover:translate-x-0.5"
                   }`}
                 >
                   <GroupIcon
@@ -530,7 +530,7 @@ export function Layout({
       {/* Main content */}
       <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
         {/* Desktop topbar */}
-        <header className="hidden lg:flex bg-card border-b border-border px-6 py-3 items-center justify-between gap-4 sticky top-0 z-40">
+        <header className="hidden lg:flex bg-card/80 backdrop-blur-md border-b border-border px-6 py-3 items-center justify-between gap-4 sticky top-0 z-40">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-green-500" />
             <span className="text-sm text-muted-foreground">
@@ -549,7 +549,7 @@ export function Layout({
         </header>
 
         {/* Mobile topbar */}
-        <header className="lg:hidden bg-card border-b border-border px-4 py-3 flex items-center justify-between sticky top-0 z-40">
+        <header className="lg:hidden bg-card/80 backdrop-blur-md border-b border-border px-4 py-3 flex items-center justify-between sticky top-0 z-40">
           <button
             onClick={() => setIsSidebarOpen(true)}
             className="erp-touch-target -ml-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"

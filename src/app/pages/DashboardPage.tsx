@@ -1,4 +1,5 @@
 // src/app/pages/DashboardPage.tsx
+import { CountUp } from "../components/CountUp";
 import {
   memo,
   useCallback,
@@ -545,7 +546,7 @@ export function DashboardPage() {
           return (
             <div
               key={stat.label}
-              className="flex items-center gap-4 rounded-xl border erp-surface px-5 py-4"
+              className="erp-surface erp-kpi erp-lift flex items-center gap-4 px-5 py-4"
             >
               <div
                 className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${stat.tone}`}
@@ -554,7 +555,7 @@ export function DashboardPage() {
               </div>
               <div className="min-w-0">
                 <p className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-                  {stat.value}
+                  <CountUp value={stat.value} />
                 </p>
                 <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
                   {stat.label}

@@ -40,3 +40,49 @@ body { overflow-x: hidden; }
 .hide-mobile { display: none; }
 .show-mobile { display: block; }
 @media (min-width: 640px) { .hide-mobile { display: block; } .show-mobile { display: none; } }
+
+/* ───────── Movimento ───────── */
+@keyframes erp-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes erp-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes erp-shimmer { 100% { transform: translateX(100%); } }
+
+.erp-rise { animation: erp-rise .6s cubic-bezier(.22,.8,.3,1) backwards; }
+
+/* Os blocos de cada página entram em sequência (cabeçalho, KPIs, cartões…) */
+.erp-page > * > * { animation: erp-rise .5s cubic-bezier(.22,.8,.3,1) backwards; }
+.erp-page > * > *:nth-child(1) { animation-delay: .00s; }
+.erp-page > * > *:nth-child(2) { animation-delay: .06s; }
+.erp-page > * > *:nth-child(3) { animation-delay: .12s; }
+.erp-page > * > *:nth-child(4) { animation-delay: .18s; }
+.erp-page > * > *:nth-child(5) { animation-delay: .24s; }
+.erp-page > * > *:nth-child(6) { animation-delay: .30s; }
+.erp-page > * > *:nth-child(n+7) { animation-delay: .36s; }
+
+/* Cartões e botões "vivos" */
+.erp-surface { transition: box-shadow .25s ease, border-color .25s ease, transform .25s ease; }
+.erp-surface:hover { border-color: color-mix(in srgb, var(--primary) 28%, var(--border)); box-shadow: 0 14px 38px rgba(0, 0, 0, 0.09); }
+.dark .erp-surface:hover { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35); }
+.erp-lift:hover { transform: translateY(-3px); }
+
+/* KPI: barra vermelha de assinatura à esquerda */
+.erp-kpi { position: relative; overflow: hidden; }
+.erp-kpi::before { content: ""; position: absolute; left: 0; top: 14%; bottom: 14%; width: 3px; border-radius: 0 3px 3px 0; background: var(--primary); opacity: .85; transition: top .25s ease, bottom .25s ease; }
+.erp-kpi:hover::before { top: 0; bottom: 0; }
+
+button, [role="button"], a { transition: background-color .18s ease, color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .12s ease, opacity .18s ease; }
+button:not(:disabled):active, [role="button"]:active { transform: scale(0.97); }
+
+tbody tr { transition: background-color .15s ease; }
+tbody tr:hover { background-color: color-mix(in srgb, var(--primary) 5%, transparent); }
+
+/* Diálogos e menus */
+[data-slot="dialog-content"], [role="dialog"] { animation: erp-fade .2s ease-out backwards; }
+
+html { scroll-behavior: smooth; }
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted-foreground) 40%, transparent) transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  .erp-rise, .erp-page > * > *, [data-slot="dialog-content"], [role="dialog"] { animation: none !important; }
+  .erp-lift:hover, button:not(:disabled):active { transform: none !important; }
+  html { scroll-behavior: auto; }
+}
