@@ -10,9 +10,9 @@ export function PageTransition({ children }: { children: ReactNode }) {
   return (
     <motion.div
       className="erp-page"
-      initial={reduzir ? false : { opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ type: "spring", stiffness: 280, damping: 28, mass: 0.9 }}
+      initial={reduzir ? false : { opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
     >
       {children}
     </motion.div>

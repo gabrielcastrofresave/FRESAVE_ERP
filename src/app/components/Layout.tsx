@@ -539,7 +539,7 @@ export function Layout({
       {/* Main content */}
       <div className="flex-1 flex flex-col min-h-screen overflow-x-hidden">
         {/* Desktop topbar */}
-        <header className="hidden lg:flex erp-glass border-b border-border/60 px-6 py-3 items-center justify-between gap-4 sticky top-0 z-40">
+        <header className="hidden lg:flex bg-card/95 border-b border-border/60 px-6 py-3 items-center justify-between gap-4 sticky top-0 z-40">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-green-500" />
             <span className="text-sm text-muted-foreground">
@@ -558,7 +558,7 @@ export function Layout({
         </header>
 
         {/* Mobile topbar */}
-        <header className="lg:hidden erp-glass border-b border-border/60 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
+        <header className="lg:hidden bg-card/95 border-b border-border/60 px-4 py-3 flex items-center justify-between sticky top-0 z-40">
           <button
             onClick={() => setIsSidebarOpen(true)}
             className="erp-touch-target -ml-2 rounded-xl text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"

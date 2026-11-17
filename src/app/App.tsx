@@ -1,23 +1,23 @@
-import { useState, useEffect } from "react";
+import { lazy, Suspense, useState, useEffect } from "react";
 import { Layout } from "./components/Layout";
 import { PWAInstallBanner } from "./components/PWAInstallBanner";
-import { MyActivityPage } from "./pages/MyActivityPage";
+const MyActivityPage = lazy(() => import("./pages/MyActivityPage").then((m) => ({ default: m.MyActivityPage })));
 import LoginPage from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
-import { VehiclesPage } from "./pages/VehiclesPage";
-import { EquipmentPage } from "./pages/EquipmentPage";
-import { CalendarPage } from "./pages/CalendarPage";
-import { AccountingPage } from "./pages/AccountingPage";
-import { EquipmentDataPage } from "./pages/EquipmentDataPage";
-import { TrackingPublicPage } from "./pages/TrackingPublicPage";
-import { UsersPage } from "./pages/UsersPage";
-import { InsurancePage } from "./pages/InsurancePage";
-import { InspectionPage } from "./pages/InspectionPage";
-import { ServiceReportsPage } from "./pages/ServiceReportsPage";
-import { OthersPage } from "./pages/OthersPage";
-import { JobsPage } from "./pages/JobsPage";
-import { SchedulesPage } from "./pages/SchedulesPage";
-import { ProductionCalendarPage } from "./pages/ProductionCalendarPage";
+const VehiclesPage = lazy(() => import("./pages/VehiclesPage").then((m) => ({ default: m.VehiclesPage })));
+const EquipmentPage = lazy(() => import("./pages/EquipmentPage").then((m) => ({ default: m.EquipmentPage })));
+const CalendarPage = lazy(() => import("./pages/CalendarPage").then((m) => ({ default: m.CalendarPage })));
+const AccountingPage = lazy(() => import("./pages/AccountingPage").then((m) => ({ default: m.AccountingPage })));
+const EquipmentDataPage = lazy(() => import("./pages/EquipmentDataPage").then((m) => ({ default: m.EquipmentDataPage })));
+const TrackingPublicPage = lazy(() => import("./pages/TrackingPublicPage").then((m) => ({ default: m.TrackingPublicPage })));
+const UsersPage = lazy(() => import("./pages/UsersPage").then((m) => ({ default: m.UsersPage })));
+const InsurancePage = lazy(() => import("./pages/InsurancePage").then((m) => ({ default: m.InsurancePage })));
+const InspectionPage = lazy(() => import("./pages/InspectionPage").then((m) => ({ default: m.InspectionPage })));
+const ServiceReportsPage = lazy(() => import("./pages/ServiceReportsPage").then((m) => ({ default: m.ServiceReportsPage })));
+const OthersPage = lazy(() => import("./pages/OthersPage").then((m) => ({ default: m.OthersPage })));
+const JobsPage = lazy(() => import("./pages/JobsPage").then((m) => ({ default: m.JobsPage })));
+const SchedulesPage = lazy(() => import("./pages/SchedulesPage").then((m) => ({ default: m.SchedulesPage })));
+const ProductionCalendarPage = lazy(() => import("./pages/ProductionCalendarPage").then((m) => ({ default: m.ProductionCalendarPage })));
 import { useApp } from "./AppContext";
 import { AppProvider } from "./AppContext";
 import { ThemeProvider } from "next-themes";
@@ -81,7 +81,17 @@ function AppContent() {
       currentPage={currentPage}
       onNavigate={setCurrentPage}
     >
-      <PageTransition key={currentPage}>{renderPage()}</PageTransition>
+      <PageTransition key={currentPage}>
+        <Suspense
+          fallback={
+            <div className="flex min-h-[40vh] items-center justify-center text-sm text-muted-foreground">
+              A carregar…
+            </div>
+          }
+        >
+          {renderPage()}
+        </Suspense>
+      </PageTransition>
     </Layout>
   );
 }
@@ -106,7 +116,11 @@ function App() {
     window.location.search,
   ).get("rastreio");
   if (trackingCode) {
-    return <TrackingPublicPage code={trackingCode} />;
+    return (
+      <Suspense fallback={null}>
+        <TrackingPublicPage code={trackingCode} />
+      </Suspense>
+    );
   }
 
   return (
