@@ -90,3 +90,20 @@ html { scroll-behavior: smooth; }
 /* Texto selecionável em vermelho, cursor vermelho */
 input, textarea { caret-color: var(--primary); }
 ::selection { background: color-mix(in srgb, var(--primary) 25%, transparent); }
+
+/* ───────── iOS / macOS no computador ───────── */
+.erp-sidebar-glass { background: rgba(28, 28, 30, 0.86); -webkit-backdrop-filter: saturate(180%) blur(28px); backdrop-filter: saturate(180%) blur(28px); }
+.dark .erp-sidebar-glass { background: rgba(18, 18, 20, 0.88); }
+
+/* Barras de deslocação discretas, como no macOS */
+* ::-webkit-scrollbar { width: 12px; height: 12px; }
+* ::-webkit-scrollbar-track { background: transparent; }
+* ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted-foreground) 45%, transparent); border-radius: 999px; border: 3px solid transparent; background-clip: padding-box; }
+* ::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--muted-foreground) 70%, transparent); background-clip: padding-box; }
+
+/* Tabelas como listas agrupadas do iOS: cabeçalho discreto e separadores finos */
+thead th { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted-foreground); }
+tbody tr { border-bottom: 0.5px solid color-mix(in srgb, var(--border) 85%, transparent); }
+tbody tr:last-child { border-bottom: 0; }
+
+* { -webkit-tap-highlight-color: transparent; }

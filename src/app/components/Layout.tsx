@@ -290,7 +290,7 @@ export function Layout({
       </div>
 
       {/* User card */}
-      <div className="px-4 py-3 mx-3 mt-3 rounded-xl bg-white/5 border border-white/10 flex-shrink-0">
+      <div className="px-4 py-3 mx-3 mt-3 rounded-2xl bg-white/5 border border-white/10 flex-shrink-0">
         <div className="flex items-center gap-3">
           <div
             className="w-9 h-9 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
@@ -354,7 +354,7 @@ export function Layout({
                     onNavigate(targetId!);
                     setIsSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group ${
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group ${
                     isActive
                       ? "bg-red-600 text-white shadow-[0_8px_18px_rgba(220,38,38,0.25)]"
                       : "text-zinc-400 hover:text-white hover:bg-white/[0.08] hover:translate-x-0.5"
@@ -377,7 +377,7 @@ export function Layout({
                 <div>
                   <button
                     onClick={() => toggleGroup(group.id)}
-                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group ${
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group ${
                       isActive || isExpanded
                         ? "text-white bg-white/[0.08]"
                         : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"
@@ -496,12 +496,13 @@ export function Layout({
   return (
     <div className="min-h-screen bg-background flex">
       {/* Desktop sidebar */}
+      <div className="hidden lg:block w-[17.5rem] xl:w-80 flex-shrink-0 p-3 pr-0">
       <aside
-        className="hidden lg:flex lg:flex-col w-64 xl:w-72 sticky top-0 h-screen flex-shrink-0 shadow-[12px_0_40px_rgba(0,0,0,0.08)]"
-        style={{ background: "var(--sidebar)" }}
+        className="erp-sidebar-glass flex flex-col sticky top-3 h-[calc(100vh-1.5rem)] overflow-hidden rounded-[1.75rem] border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.25)]"
       >
         <SidebarContent dark />
       </aside>
+      </div>
 
       {/* Mobile sidebar overlay */}
       {isSidebarOpen && (
