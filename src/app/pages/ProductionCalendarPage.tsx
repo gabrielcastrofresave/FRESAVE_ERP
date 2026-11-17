@@ -52,8 +52,8 @@ const HOUR_PX = 56;
 const CORES = [
   {
     bloco:
-      "bg-sky-100 border-sky-500 text-sky-900 dark:bg-sky-950/70 dark:border-sky-500 dark:text-sky-100",
-    ponto: "bg-sky-500",
+      "bg-red-100 border-red-500 text-red-900 dark:bg-red-950/70 dark:border-red-500 dark:text-red-100",
+    ponto: "bg-red-500",
   },
   {
     bloco:
@@ -87,8 +87,8 @@ const CORES = [
   },
   {
     bloco:
-      "bg-indigo-100 border-indigo-500 text-indigo-900 dark:bg-indigo-950/70 dark:border-indigo-500 dark:text-indigo-100",
-    ponto: "bg-indigo-500",
+      "bg-red-100 border-red-500 text-red-900 dark:bg-red-950/70 dark:border-red-500 dark:text-red-100",
+    ponto: "bg-red-500",
   },
 ];
 
@@ -410,7 +410,7 @@ export function ProductionCalendarPage() {
     <div className="mx-auto max-w-7xl space-y-7">
       <header className="flex flex-col gap-4 border-b border-border pb-6 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-amber-600 dark:text-amber-300">
+          <p className="text-xs font-semibold tracking-[0.14em] text-red-600 dark:text-red-400">
             TEMPOS E ATIVIDADE
           </p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
@@ -424,7 +424,7 @@ export function ProductionCalendarPage() {
         </div>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
-            <Button className="h-10 bg-blue-700 text-white hover:bg-blue-800">
+            <Button className="h-10 bg-red-600 text-white hover:bg-red-700">
               <Plus className="mr-2 h-4 w-4" />
               Novo Registo
             </Button>
@@ -1502,7 +1502,7 @@ function TaskForm({
         </Button>
         <Button
           type="submit"
-          className="bg-blue-700 hover:bg-blue-800"
+          className="bg-red-600 hover:bg-red-700"
           disabled={loading}
         >
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

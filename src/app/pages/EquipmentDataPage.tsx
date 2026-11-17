@@ -117,7 +117,7 @@ export function EquipmentDataPage() {
           <Button onClick={() => {
             setCategoria(activeTab); // Pré-seleciona a categoria dependendo da aba
             setIsUploadModalOpen(true);
-          }} className="bg-blue-600 hover:bg-blue-700">
+          }} className="bg-red-600 hover:bg-red-600">
             <Upload className="w-4 h-4 mr-2" />
             Novo Ficheiro
           </Button>
@@ -205,7 +205,7 @@ export function EquipmentDataPage() {
                   id="categoria"
                   value={categoria}
                   onChange={(e) => setCategoria(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-sm dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border rounded-md text-sm dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500"
                   required
                 >
                   <option value="Equipamentos">Equipamentos</option>
@@ -219,7 +219,7 @@ export function EquipmentDataPage() {
                   id="destinatario"
                   value={destinatario}
                   onChange={(e) => setDestinatario(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md text-sm dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border rounded-md text-sm dark:bg-gray-800 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500"
                   required
                 >
                   <option value="">Selecione o destinatário...</option>
@@ -236,10 +236,10 @@ export function EquipmentDataPage() {
               <Label>Ficheiro (Apenas PDF) *</Label>
               <div className="mt-1 border-2 border-dashed border-gray-300 dark:border-gray-700 p-6 rounded-lg text-center cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                  <Label htmlFor="file-upload" className="cursor-pointer block w-full h-full">
-                    <Upload className={`mx-auto mb-2 w-8 h-8 ${selectedFile ? 'text-blue-500' : 'text-gray-400'}`} />
+                    <Upload className={`mx-auto mb-2 w-8 h-8 ${selectedFile ? 'text-red-500' : 'text-gray-400'}`} />
                     <span className="text-sm font-medium">
                       {selectedFile ? (
-                        <span className="text-blue-600 dark:text-blue-400 font-semibold">{selectedFile.name}</span>
+                        <span className="text-red-600 dark:text-red-400 font-semibold">{selectedFile.name}</span>
                       ) : (
                         "Clique para selecionar o PDF"
                       )}
@@ -260,7 +260,7 @@ export function EquipmentDataPage() {
               <Button type="button" variant="outline" onClick={() => setIsUploadModalOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={isUploading || !selectedFile}>
+              <Button type="submit" className="bg-red-600 hover:bg-red-600" disabled={isUploading || !selectedFile}>
                 {isUploading ? "A carregar..." : "Submeter Documento"}
               </Button>
             </DialogFooter>

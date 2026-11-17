@@ -132,7 +132,7 @@ function KpiCard({
     red:   "text-red-600 bg-red-50 dark:bg-red-950/30 dark:text-red-400",
     amber: "text-amber-600 bg-amber-50 dark:bg-amber-950/30 dark:text-amber-400",
     green: "text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30 dark:text-emerald-400",
-    blue:  "text-blue-600 bg-blue-50 dark:bg-blue-950/30 dark:text-blue-400",
+    blue:  "text-red-600 bg-red-50 dark:bg-red-950/30 dark:text-red-400",
   }[accent ?? "blue"];
 
   return (
@@ -475,7 +475,7 @@ export function OthersPage() {
             disabled={tab === "stock" ? filteredStock.length === 0 : filteredMovements.length === 0}>
             <Download className="mr-1.5 h-3.5 w-3.5" />CSV
           </Button>
-          <Button size="sm" className="h-8 bg-blue-700 text-white hover:bg-blue-800"
+          <Button size="sm" className="h-8 bg-red-600 text-white hover:bg-red-700"
             onClick={() => { resetItemForm(); setIsItemModal(true); }}>
             <PackagePlus className="mr-1.5 h-3.5 w-3.5" />Novo Artigo
           </Button>
@@ -860,7 +860,7 @@ export function OthersPage() {
             </div>
             <div className="flex justify-end gap-2 border-t pt-3">
               <Button type="button" variant="outline" onClick={() => { setIsItemModal(false); resetItemForm(); }}>Cancelar</Button>
-              <Button type="submit" className="bg-blue-700 hover:bg-blue-800">
+              <Button type="submit" className="bg-red-600 hover:bg-red-700">
                 {editingItem ? "Guardar Alterações" : "Criar Artigo"}
               </Button>
             </div>

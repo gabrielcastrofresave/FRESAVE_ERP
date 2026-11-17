@@ -54,7 +54,7 @@ export function InspectionDetailsModal({
     statusIcon = <AlertTriangle className="w-3 h-3 mr-1" />;
   } else if (nextDate < today) {
     status = "Vencida";
-    statusClass = "bg-blue-700 hover:bg-blue-800";
+    statusClass = "bg-red-600 hover:bg-red-700";
     statusIcon = <X className="w-3 h-3 mr-1" />;
   } else if (
     nextDate.getTime() - today.getTime() <
@@ -181,7 +181,7 @@ export function InspectionDetailsModal({
           {onComplete && (
             <Button
               onClick={() => onComplete(data)}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="bg-red-600 hover:bg-red-600 text-white"
             >
               <CheckCircle className="w-4 h-4 mr-2" />
               Agendar / Renovar

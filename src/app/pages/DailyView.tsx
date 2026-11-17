@@ -386,7 +386,7 @@ export function MonthlyView({
                   .map((task) => (
                     <div
                       key={task.id}
-                      className="bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-1 py-0.5 rounded truncate"
+                      className="bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-300 px-1 py-0.5 rounded truncate"
                     >
                       {task.titulo}
                     </div>

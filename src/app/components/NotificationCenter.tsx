@@ -35,9 +35,9 @@ const TYPE_CONFIG: Record<
   },
   info: {
     icon: Info,
-    color: "text-blue-600 dark:text-blue-400",
-    bg: "bg-blue-50 dark:bg-blue-950/30",
-    border: "border-blue-200 dark:border-blue-800",
+    color: "text-red-600 dark:text-red-400",
+    bg: "bg-red-50 dark:bg-red-950/30",
+    border: "border-red-200 dark:border-red-800",
   },
 };
 
@@ -112,7 +112,7 @@ export function NotificationCenter() {
               <Bell className="w-4 h-4 text-muted-foreground" />
               <h3 className="text-sm font-semibold">Notificações</h3>
               {unreadCount > 0 && (
-                <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-bold rounded-full">
+                <span className="px-1.5 py-0.5 bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-300 text-xs font-bold rounded-full">
                   {unreadCount} novas
                 </span>
               )}
@@ -167,7 +167,7 @@ export function NotificationCenter() {
                       key={n.id}
                       className={`group flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors ${
                         !n.lida
-                          ? "bg-blue-50/60 dark:bg-blue-950/10 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+                          ? "bg-red-50/60 dark:bg-red-950/10 hover:bg-red-50 dark:hover:bg-red-950/20"
                           : "hover:bg-muted/50"
                       }`}
                       onClick={() => markAsRead(n.id)}
@@ -185,7 +185,7 @@ export function NotificationCenter() {
                           </p>
                           <div className="flex items-center gap-1 flex-shrink-0">
                             {!n.lida && (
-                              <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                              <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
                             )}
                             <button
                               onClick={(e) => { e.stopPropagation(); removeNotification(n.id); }}
@@ -209,7 +209,7 @@ export function NotificationCenter() {
                                 n.acao?.callback();
                                 setIsOpen(false);
                               }}
-                              className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 hover:underline"
+                              className="text-[10px] font-semibold text-red-600 dark:text-red-400 hover:underline"
                             >
                               {n.acao.label} →
                             </button>

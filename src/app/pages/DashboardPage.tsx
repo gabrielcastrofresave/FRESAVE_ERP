@@ -507,7 +507,7 @@ export function DashboardPage() {
       {/* Header */}
       <header className="flex flex-col gap-5 border-b border-border pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-amber-600 dark:text-amber-300">
+          <p className="text-xs font-semibold tracking-[0.14em] text-red-600 dark:text-red-400">
             VISÃO GERAL
           </p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
@@ -530,7 +530,7 @@ export function DashboardPage() {
           </Button>
           <Button
             onClick={() => setRegisterOpen(true)}
-            className="h-11 bg-blue-700 text-white shadow-lg shadow-blue-700/15 hover:bg-blue-800"
+            className="h-11 bg-red-600 text-white shadow-lg shadow-red-600/15 hover:bg-red-700"
           >
             <ClipboardPlus className="mr-2 h-4 w-4" />
             Registar Atividade
@@ -790,7 +790,7 @@ function TrackLookupForm({ onClose }: { onClose: () => void }) {
         </Button>
         <Button
           type="submit"
-          className="bg-blue-700 hover:bg-blue-800"
+          className="bg-red-600 hover:bg-red-700"
           disabled={loading}
         >
           {loading && (
@@ -910,7 +910,7 @@ function QuickRegisterForm({
         </Button>
         <Button
           type="submit"
-          className="bg-blue-700 hover:bg-blue-800"
+          className="bg-red-600 hover:bg-red-700"
           disabled={loading}
         >
           {loading && (

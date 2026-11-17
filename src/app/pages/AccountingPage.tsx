@@ -757,7 +757,7 @@ export function AccountingPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-7">
       <header className="border-b border-border pb-6">
-        <p className="text-xs font-semibold tracking-[0.14em] text-amber-600 dark:text-amber-300">
+        <p className="text-xs font-semibold tracking-[0.14em] text-red-600 dark:text-red-400">
           FINANCEIRO
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
@@ -917,7 +917,7 @@ export function AccountingPage() {
             </div>
           ) : loadError ? (
             <div className="px-4 py-8 text-center">
-              <AlertTriangle className="mx-auto h-6 w-6 text-amber-500" />
+              <AlertTriangle className="mx-auto h-6 w-6 text-red-500" />
               <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-300">
                 Não foi possível carregar os projetos.
               </p>
@@ -1205,7 +1205,7 @@ function DeleteProjectDialog({
           </button>
           <button
             onClick={() => setStep("verify")}
-            className="flex-1 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
+            className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
           >
             Sim, quero eliminar
           </button>
@@ -1267,7 +1267,7 @@ function DeleteProjectDialog({
         <button
           type="submit"
           disabled={loading || !matches}
-          className="flex-1 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {loading && (
             <Loader2 className="mr-2 inline h-3.5 w-3.5 animate-spin" />
@@ -1567,7 +1567,7 @@ function JobCostSheet({
           key: "parts" as SectionKey,
           label: "Peças",
           value: totalParts,
-          bar: "bg-sky-400",
+          bar: "bg-red-400",
         },
         {
           key: "hours" as SectionKey,
@@ -2001,7 +2001,7 @@ function JobCostSheet({
   if (loadError) {
     return (
       <div className="flex min-h-64 flex-col items-center justify-center gap-3 erp-surface text-center">
-        <AlertTriangle className="h-8 w-8 text-amber-500" />
+        <AlertTriangle className="h-8 w-8 text-red-500" />
         <p className="text-sm text-zinc-600 dark:text-zinc-300">
           Não foi possível carregar a ficha de custos.
         </p>
@@ -2547,7 +2547,7 @@ function JobCostSheet({
             <DialogTrigger asChild>
               <Button
                 size="sm"
-                className="h-8 bg-blue-700 text-xs text-white hover:bg-blue-800"
+                className="h-8 bg-red-600 text-xs text-white hover:bg-red-700"
               >
                 <Plus className="mr-1.5 h-3.5 w-3.5" />
                 Adicionar
@@ -2653,7 +2653,7 @@ function JobCostSheet({
                           <div className="flex items-center justify-end gap-1">
                             <Button
                               size="sm"
-                              className="h-7 bg-blue-700 px-2 text-xs text-white hover:bg-blue-800"
+                              className="h-7 bg-red-600 px-2 text-xs text-white hover:bg-red-700"
                               onClick={() =>
                                 handleDeleteExtra(e)
                               }
@@ -2831,7 +2831,7 @@ function ExtraCostForm({
         </Button>
         <Button
           type="submit"
-          className="bg-blue-700 hover:bg-blue-800"
+          className="bg-red-600 hover:bg-red-700"
           disabled={loading || !descricao.trim()}
         >
           {loading && (

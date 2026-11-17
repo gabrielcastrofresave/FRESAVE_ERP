@@ -271,7 +271,7 @@ export function Layout({
       {/* Logo */}
       <div className="px-5 py-4 border-b border-white/10 flex-shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center overflow-hidden flex-shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-red-500/20 border border-red-400/30 flex items-center justify-center overflow-hidden flex-shrink-0">
             <img
               src={image_logo_2}
               alt="Fresave"
@@ -282,7 +282,7 @@ export function Layout({
             <p className="text-sm font-semibold text-white leading-tight">
               Fresave ERP
             </p>
-            <p className="text-xs text-slate-400 leading-tight">
+            <p className="text-xs text-zinc-400 leading-tight">
               Gestão de Empresa
             </p>
           </div>
@@ -342,7 +342,7 @@ export function Layout({
           return (
             <div key={group.id}>
               {showSection && (
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 pt-3 pb-1 mt-1">
+                <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider px-3 pt-3 pb-1 mt-1">
                   {group.section}
                 </p>
               )}
@@ -356,18 +356,18 @@ export function Layout({
                   }}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group ${
                     isActive
-                      ? "bg-amber-400 text-slate-950 shadow-[0_8px_18px_rgba(247,179,43,0.18)]"
-                      : "text-slate-400 hover:text-white hover:bg-white/[0.08]"
+                      ? "bg-red-600 text-white shadow-[0_8px_18px_rgba(220,38,38,0.25)]"
+                      : "text-zinc-400 hover:text-white hover:bg-white/[0.08]"
                   }`}
                 >
                   <GroupIcon
-                    className={`w-4 h-4 flex-shrink-0 ${isActive ? "text-white" : "text-slate-500 group-hover:text-slate-300"}`}
+                    className={`w-4 h-4 flex-shrink-0 ${isActive ? "text-white" : "text-zinc-500 group-hover:text-zinc-300"}`}
                   />
                   <span className="flex-1 text-left truncate">
                     {group.label}
                   </span>
                   {isActive && (
-                    <div className="w-1.5 h-1.5 rounded-full bg-blue-300 flex-shrink-0" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-red-300 flex-shrink-0" />
                   )}
                 </button>
               )}
@@ -380,19 +380,19 @@ export function Layout({
                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 group ${
                       isActive || isExpanded
                         ? "text-white bg-white/[0.08]"
-                        : "text-slate-400 hover:text-white hover:bg-white/[0.06]"
+                        : "text-zinc-400 hover:text-white hover:bg-white/[0.06]"
                     }`}
                   >
                     <GroupIcon
-                      className={`w-4 h-4 flex-shrink-0 ${isActive || isExpanded ? "text-blue-400" : "text-slate-500 group-hover:text-slate-300"}`}
+                      className={`w-4 h-4 flex-shrink-0 ${isActive || isExpanded ? "text-red-400" : "text-zinc-500 group-hover:text-zinc-300"}`}
                     />
                     <span className="flex-1 text-left truncate">
                       {group.label}
                     </span>
                     {isExpanded ? (
-                      <ChevronDown className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+                      <ChevronDown className="w-3.5 h-3.5 text-zinc-500 flex-shrink-0" />
                     ) : (
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-600 flex-shrink-0" />
+                      <ChevronRight className="w-3.5 h-3.5 text-zinc-600 flex-shrink-0" />
                     )}
                   </button>
 
@@ -411,12 +411,12 @@ export function Layout({
                             }}
                             className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-all duration-150 ${
                               itemActive
-                                ? "bg-blue-600/90 text-white font-medium shadow-sm"
-                                : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
+                                ? "bg-red-600/90 text-white font-medium shadow-sm"
+                                : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
                             }`}
                           >
                             <ItemIcon
-                              className={`w-3.5 h-3.5 flex-shrink-0 ${itemActive ? "text-white" : "text-slate-600"}`}
+                              className={`w-3.5 h-3.5 flex-shrink-0 ${itemActive ? "text-white" : "text-zinc-600"}`}
                             />
                             <span className="flex-1 text-left truncate">
                               {item.label}
@@ -439,7 +439,7 @@ export function Layout({
           onClick={() =>
             setTheme(theme === "dark" ? "light" : "dark")
           }
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:text-slate-200 hover:bg-white/8 transition-all"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 hover:bg-white/8 transition-all"
         >
           {theme === "dark" ? (
             <>
@@ -455,7 +455,7 @@ export function Layout({
         </button>
         <button
           onClick={logout}
-          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-zinc-400 hover:text-red-400 hover:bg-red-500/10 transition-all"
         >
           <LogOut className="w-4 h-4" />
           <span>Terminar Sessão</span>
@@ -471,8 +471,8 @@ export function Layout({
         style={{ background: "var(--background)" }}
       >
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-slate-500">
+          <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-zinc-500">
             A carregar sistema...
           </p>
         </div>
@@ -486,7 +486,7 @@ export function Layout({
         className="h-screen w-full flex items-center justify-center"
         style={{ background: "var(--background)" }}
       >
-        <p className="text-slate-500 text-sm animate-pulse">
+        <p className="text-zinc-500 text-sm animate-pulse">
           A verificar sessão...
         </p>
       </div>
@@ -497,7 +497,7 @@ export function Layout({
     <div className="min-h-screen bg-background flex">
       {/* Desktop sidebar */}
       <aside
-        className="hidden lg:flex lg:flex-col w-64 xl:w-72 sticky top-0 h-screen flex-shrink-0 shadow-[12px_0_40px_rgba(7,18,36,0.08)]"
+        className="hidden lg:flex lg:flex-col w-64 xl:w-72 sticky top-0 h-screen flex-shrink-0 shadow-[12px_0_40px_rgba(0,0,0,0.08)]"
         style={{ background: "var(--sidebar)" }}
       >
         <SidebarContent dark />
@@ -517,7 +517,7 @@ export function Layout({
             <div className="flex justify-end p-3 flex-shrink-0">
               <button
                 onClick={() => setIsSidebarOpen(false)}
-                className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors"
+                className="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -572,11 +572,11 @@ export function Layout({
         <main className="flex-1 p-3 pb-20 sm:p-5 sm:pb-20 md:p-6 md:pb-20 lg:p-7 lg:pb-7 xl:p-8 bg-background">
           <div className="mx-auto w-full max-w-[1600px]">{children}</div>
         </main>
-        <nav aria-label="Navegação rápida" className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-border bg-card/95 px-2 py-2 shadow-[0_-8px_24px_rgba(15,31,59,0.08)] backdrop-blur lg:hidden">
+        <nav aria-label="Navegação rápida" className="mobile-bottom-nav fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-border bg-card/95 px-2 py-2 shadow-[0_-8px_24px_rgba(0,0,0,0.08)] backdrop-blur lg:hidden">
           {mobileNavItems.map((item) => {
             const Icon = item.icon;
             const active = currentPage === item.id;
-            return <button key={item.id} type="button" onClick={() => onNavigate(item.id)} className={`erp-touch-target flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] transition-colors ${active ? "text-blue-700 dark:text-blue-300" : "text-muted-foreground"}`} aria-current={active ? "page" : undefined}><Icon className={`h-4 w-4 ${active ? "text-amber-500" : ""}`} /><span className="max-w-full truncate">{item.label}</span></button>;
+            return <button key={item.id} type="button" onClick={() => onNavigate(item.id)} className={`erp-touch-target flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-1 text-[10px] transition-colors ${active ? "text-red-600 dark:text-red-300" : "text-muted-foreground"}`} aria-current={active ? "page" : undefined}><Icon className={`h-4 w-4 ${active ? "text-red-500" : ""}`} /><span className="max-w-full truncate">{item.label}</span></button>;
           })}
         </nav>
       </div>

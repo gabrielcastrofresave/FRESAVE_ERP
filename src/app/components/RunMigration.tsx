@@ -173,7 +173,7 @@ export function RunMigration() {
           <div className={`mt-4 p-3 rounded ${
             status === 'success' ? 'bg-green-100 dark:bg-green-900' :
             status === 'error' ? 'bg-red-100 dark:bg-red-900' :
-            'bg-blue-100 dark:bg-blue-900'
+            'bg-red-100 dark:bg-red-900'
           }`}>
             <pre className="whitespace-pre-wrap text-sm">{message}</pre>
           </div>

@@ -28,7 +28,7 @@ export function TrackingPublicPage({ code }: { code: string }) {
   return (
     <div className="min-h-screen bg-zinc-50 px-4 py-12">
       <div className="mx-auto max-w-lg">
-        <p className="mb-8 text-center text-xs font-semibold tracking-[0.14em] text-amber-600 dark:text-amber-300">
+        <p className="mb-8 text-center text-xs font-semibold tracking-[0.14em] text-red-600 dark:text-red-400">
           FRESAVE · RASTREIO DE ENCOMENDA
         </p>
 

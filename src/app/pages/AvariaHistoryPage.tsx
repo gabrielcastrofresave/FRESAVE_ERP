@@ -52,9 +52,9 @@ const TIPO_LABELS: Record<string, string> = {
 };
 
 const TIPO_COLORS: Record<string, string> = {
-  camiao: 'bg-blue-500',
+  camiao: 'bg-red-500',
   viatura: 'bg-teal-500',
-  maquina: 'bg-indigo-500',
+  maquina: 'bg-red-500',
   equipamento: 'bg-purple-500',
 };
 

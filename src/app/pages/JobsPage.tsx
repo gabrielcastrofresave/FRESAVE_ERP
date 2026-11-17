@@ -545,7 +545,7 @@ export function JobsPage() {
     <div className="mx-auto max-w-7xl space-y-7">
       <header className="flex flex-col gap-4 border-b border-border pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-amber-600 dark:text-amber-300">
+          <p className="text-xs font-semibold tracking-[0.14em] text-red-600 dark:text-red-400">
             ORDEM DE TRABALHO
           </p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
@@ -568,7 +568,7 @@ export function JobsPage() {
           >
             <DialogTrigger asChild>
               <Button
-                className="h-10 bg-blue-700 text-white hover:bg-blue-800"
+                className="h-10 bg-red-600 text-white hover:bg-red-700"
                 onClick={() => setEditingJob(null)}
               >
                 <Plus className="mr-2 h-4 w-4" />
@@ -1107,7 +1107,7 @@ function ActiveJob({
             )}
             <Button
               size="sm"
-              className="ml-auto h-8 bg-blue-700 text-xs text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+              className="ml-auto h-8 bg-red-600 text-xs text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
               onClick={onComplete}
               disabled={!hasNoChecklist && !checklistComplete}
             >
@@ -1354,7 +1354,7 @@ function JobForm({
           <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-amber-700 dark:text-amber-400">
             Assistência
           </p>
-          <p className="mt-1 text-xs text-amber-600 dark:text-amber-300">
+          <p className="mt-1 text-xs text-red-600 dark:text-red-400">
             Este trabalho será marcado como concluído sem fases
             intermédias.
           </p>
@@ -1367,7 +1367,7 @@ function JobForm({
         </Button>
         <Button
           type="submit"
-          className="bg-blue-700 hover:bg-blue-800"
+          className="bg-red-600 hover:bg-red-700"
           disabled={loading}
         >
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -1457,7 +1457,7 @@ function DeleteJobForm({
         <Button
           type="submit"
           disabled={!matches || loading}
-          className="bg-blue-700 text-white hover:bg-blue-800 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
+          className="bg-red-600 text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-600"
         >
           {loading ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1590,7 +1590,7 @@ function CompletionForm({
         <Button
           type="submit"
           disabled={loading}
-          className="bg-blue-700 hover:bg-blue-800"
+          className="bg-red-600 hover:bg-red-700"
         >
           {loading && (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

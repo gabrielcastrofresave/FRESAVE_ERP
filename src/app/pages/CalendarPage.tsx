@@ -284,15 +284,15 @@ export function CalendarPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-7">
       {/* Header */}
-      <header className="flex flex-col gap-4 border-b border-slate-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
+      <header className="flex flex-col gap-4 border-b border-zinc-200 pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-blue-700 dark:text-blue-300">
+          <p className="text-xs font-semibold tracking-[0.14em] text-red-600 dark:text-red-300">
             CALENDÁRIO
           </p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Gestão de Recursos
           </h1>
-          <p className="mt-2 text-sm leading-6 text-slate-500">
+          <p className="mt-2 text-sm leading-6 text-zinc-500">
             Consulte e gira reservas de viaturas e requisições
             de equipamentos.
           </p>
@@ -308,7 +308,7 @@ export function CalendarPage() {
       </header>
 
       {/* Tabs */}
-      <div className="flex rounded-lg bg-slate-100 p-1 w-fit">
+      <div className="flex rounded-lg bg-zinc-100 p-1 w-fit">
         <button
           onClick={() => {
             setActiveTab("vehicles");
@@ -316,8 +316,8 @@ export function CalendarPage() {
           }}
           className={`flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
             activeTab === "vehicles"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-700"
+              ? "bg-white text-zinc-900 shadow-sm"
+              : "text-zinc-500 hover:text-zinc-700"
           }`}
         >
           <Car className="h-3.5 w-3.5" />
@@ -330,8 +330,8 @@ export function CalendarPage() {
           }}
           className={`flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
             activeTab === "equipment"
-              ? "bg-white text-slate-900 shadow-sm"
-              : "text-slate-500 hover:text-slate-700"
+              ? "bg-white text-zinc-900 shadow-sm"
+              : "text-zinc-500 hover:text-zinc-700"
           }`}
         >
           <Wrench className="h-3.5 w-3.5" />
@@ -341,9 +341,9 @@ export function CalendarPage() {
 
       {/* Painel principal */}
       <section className="overflow-hidden erp-surface">
-        <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 border-b border-zinc-100 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative w-full sm:w-72">
-            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
             <Input
               placeholder={`Pesquisar ${activeTab === "vehicles" ? "viatura" : "equipamento"}...`}
               value={searchTerm}
@@ -352,7 +352,7 @@ export function CalendarPage() {
             />
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-slate-600">
+            <span className="text-sm font-medium text-zinc-600">
               {weekStart} – {weekEnd}
             </span>
             <Button
@@ -386,7 +386,7 @@ export function CalendarPage() {
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 text-xs text-blue-700 dark:text-blue-300"
+              className="h-8 text-xs text-red-600 dark:text-red-300"
               onClick={() => setCurrentWeek(new Date())}
             >
               Hoje
@@ -397,8 +397,8 @@ export function CalendarPage() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-left">
             <thead>
-              <tr className="bg-slate-50 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-                <th className="sticky left-0 z-10 w-52 bg-slate-50 px-4 py-3">
+              <tr className="bg-zinc-50 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
+                <th className="sticky left-0 z-10 w-52 bg-zinc-50 px-4 py-3">
                   {activeTab === "vehicles"
                     ? "Viatura"
                     : "Equipamento"}
@@ -408,7 +408,7 @@ export function CalendarPage() {
                     key={i}
                     className={`min-w-[110px] px-2 py-3 text-center ${
                       isSameDay(day, new Date())
-                        ? "bg-cyan-50 text-blue-700 dark:text-blue-300"
+                        ? "bg-red-50 text-red-600 dark:text-red-300"
                         : ""
                     }`}
                   >
@@ -422,13 +422,13 @@ export function CalendarPage() {
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-zinc-100">
               {activeTab === "vehicles" ? (
                 filteredVehicles.length === 0 ? (
                   <tr>
                     <td
                       colSpan={8}
-                      className="px-5 py-14 text-center text-sm text-slate-400"
+                      className="px-5 py-14 text-center text-sm text-zinc-400"
                     >
                       Nenhuma viatura encontrada.
                     </td>
@@ -437,13 +437,13 @@ export function CalendarPage() {
                   filteredVehicles.map((vehicle: any) => (
                     <tr
                       key={vehicle.id}
-                      className="hover:bg-slate-50/50"
+                      className="hover:bg-zinc-50/50"
                     >
                       <td className="sticky left-0 z-10 bg-white px-4 py-3">
-                        <p className="font-medium text-slate-800">
+                        <p className="font-medium text-zinc-800">
                           {vehicle.matricula}
                         </p>
-                        <p className="text-xs text-slate-400">
+                        <p className="text-xs text-zinc-400">
                           {vehicle.marca} {vehicle.modelo}
                         </p>
                       </td>
@@ -463,7 +463,7 @@ export function CalendarPage() {
                                   setSelectedEvent(ev);
                                   setIsEventDetailsOpen(true);
                                 }}
-                                className="w-full rounded-md bg-blue-700 p-1.5 text-left text-[10px] text-white shadow-sm hover:opacity-90"
+                                className="w-full rounded-md bg-red-600 p-1.5 text-left text-[10px] text-white shadow-sm hover:opacity-90"
                               >
                                 <p className="truncate font-semibold">
                                   {ev.local || "Reservado"}
@@ -480,7 +480,7 @@ export function CalendarPage() {
                                     day,
                                   )
                                 }
-                                className="h-12 w-full rounded-md border border-dashed border-slate-200 text-[10px] text-slate-300 hover:border-cyan-300 hover:bg-cyan-50/60 hover:text-blue-700 dark:text-blue-300"
+                                className="h-12 w-full rounded-md border border-dashed border-zinc-200 text-[10px] text-zinc-300 hover:border-red-300 hover:bg-red-50/60 hover:text-red-600 dark:text-red-300"
                               >
                                 + Reservar
                               </button>
@@ -497,7 +497,7 @@ export function CalendarPage() {
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-5 py-14 text-center text-sm text-slate-400"
+                    className="px-5 py-14 text-center text-sm text-zinc-400"
                   >
                     Nenhum equipamento encontrado.
                   </td>
@@ -506,13 +506,13 @@ export function CalendarPage() {
                 filteredEquipment.map((item: any) => (
                   <tr
                     key={item.id}
-                    className="hover:bg-slate-50/50"
+                    className="hover:bg-zinc-50/50"
                   >
                     <td className="sticky left-0 z-10 bg-white px-4 py-3">
-                      <p className="font-medium text-slate-800">
+                      <p className="font-medium text-zinc-800">
                         {item.nome}
                       </p>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-zinc-400">
                         {item.identificacao || item.tipo}
                       </p>
                     </td>
@@ -535,10 +535,10 @@ export function CalendarPage() {
                               }}
                               className={`w-full rounded-md p-1.5 text-left text-[10px] text-white shadow-sm hover:opacity-90 ${
                                 schedule.status === "concluido"
-                                  ? "bg-slate-400"
+                                  ? "bg-zinc-400"
                                   : isFirstDay
                                     ? "bg-emerald-600"
-                                    : "bg-blue-700"
+                                    : "bg-red-600"
                               }`}
                             >
                               <p className="flex items-center gap-1 truncate font-semibold">
@@ -559,7 +559,7 @@ export function CalendarPage() {
                               onClick={() =>
                                 openEquipmentCreate(item)
                               }
-                              className="h-12 w-full rounded-md border border-dashed border-slate-200 text-[10px] text-slate-300 hover:border-cyan-300 hover:bg-cyan-50/60 hover:text-blue-700 dark:text-blue-300"
+                              className="h-12 w-full rounded-md border border-dashed border-zinc-200 text-[10px] text-zinc-300 hover:border-red-300 hover:bg-red-50/60 hover:text-red-600 dark:text-red-300"
                             >
                               + Requisitar
                             </button>
@@ -601,7 +601,7 @@ export function CalendarPage() {
               <Input
                 value={currentUser?.nome || ""}
                 disabled
-                className="bg-slate-50"
+                className="bg-zinc-50"
               />
             </div>
             <div className="space-y-2">
@@ -633,7 +633,7 @@ export function CalendarPage() {
               </Button>
               <Button
                 type="submit"
-                className="bg-blue-700 hover:bg-[#0a6078]"
+                className="bg-red-600 hover:bg-[#b91c1c]"
               >
                 Reservar
               </Button>
@@ -654,7 +654,7 @@ export function CalendarPage() {
           {selectedEvent && (
             <div className="space-y-3">
               <div>
-                <Label className="text-xs text-slate-500">
+                <Label className="text-xs text-zinc-500">
                   Data
                 </Label>
                 <p className="font-medium">
@@ -664,7 +664,7 @@ export function CalendarPage() {
                 </p>
               </div>
               <div>
-                <Label className="text-xs text-slate-500">
+                <Label className="text-xs text-zinc-500">
                   Utilizador
                 </Label>
                 <p className="font-medium">
@@ -672,7 +672,7 @@ export function CalendarPage() {
                 </p>
               </div>
               <div>
-                <Label className="text-xs text-slate-500">
+                <Label className="text-xs text-zinc-500">
                   Local
                 </Label>
                 <p className="font-medium">
@@ -723,7 +723,7 @@ export function CalendarPage() {
               <Input
                 value={currentUser?.nome || ""}
                 disabled
-                className="bg-slate-50"
+                className="bg-zinc-50"
               />
             </div>
             <div className="space-y-2">
@@ -769,7 +769,7 @@ export function CalendarPage() {
               </Button>
               <Button
                 type="submit"
-                className="bg-blue-700 hover:bg-[#0a6078]"
+                className="bg-red-600 hover:bg-[#b91c1c]"
               >
                 Requisitar
               </Button>
@@ -797,7 +797,7 @@ export function CalendarPage() {
           {selectedSchedule && (
             <div className="space-y-3">
               <div>
-                <Label className="text-xs text-slate-500">
+                <Label className="text-xs text-zinc-500">
                   Utilizador
                 </Label>
                 <p className="font-medium">
@@ -808,7 +808,7 @@ export function CalendarPage() {
                 </p>
               </div>
               <div>
-                <Label className="text-xs text-slate-500">
+                <Label className="text-xs text-zinc-500">
                   Para quem
                 </Label>
                 <p className="font-medium">
@@ -816,7 +816,7 @@ export function CalendarPage() {
                 </p>
               </div>
               <div>
-                <Label className="text-xs text-slate-500">
+                <Label className="text-xs text-zinc-500">
                   Início
                 </Label>
                 <p className="font-medium">
@@ -826,10 +826,10 @@ export function CalendarPage() {
                 </p>
               </div>
               <div>
-                <Label className="text-xs text-slate-500">
+                <Label className="text-xs text-zinc-500">
                   Status
                 </Label>
-                <p className="font-medium text-blue-700 dark:text-blue-300">
+                <p className="font-medium text-red-600 dark:text-red-300">
                   {selectedSchedule.status === "ativo"
                     ? "Em curso"
                     : "Devolvido"}
@@ -837,7 +837,7 @@ export function CalendarPage() {
               </div>
               {selectedSchedule.notas && (
                 <div>
-                  <Label className="text-xs text-slate-500">
+                  <Label className="text-xs text-zinc-500">
                     Notas
                   </Label>
                   <p className="text-sm">
@@ -891,7 +891,7 @@ export function CalendarPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
               <Input
                 placeholder="Pesquisar por equipamento, utilizador ou destinatário..."
                 value={reportSearch}
@@ -901,9 +901,9 @@ export function CalendarPage() {
                 className="h-9 pl-9"
               />
             </div>
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <div className="overflow-x-auto rounded-lg border border-zinc-200">
               <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+                <thead className="bg-zinc-50 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
                   <tr>
                     <th className="px-4 py-2">Equipamento</th>
                     <th className="px-4 py-2">Utilizador</th>
@@ -912,12 +912,12 @@ export function CalendarPage() {
                     <th className="px-4 py-2">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-zinc-100">
                   {filteredReservations.length === 0 ? (
                     <tr>
                       <td
                         colSpan={5}
-                        className="px-4 py-8 text-center text-slate-400"
+                        className="px-4 py-8 text-center text-zinc-400"
                       >
                         Nenhuma requisição encontrada.
                       </td>
@@ -926,33 +926,33 @@ export function CalendarPage() {
                     filteredReservations.map((s: any) => (
                       <tr
                         key={s.id}
-                        className="hover:bg-slate-50/70"
+                        className="hover:bg-zinc-50/70"
                       >
-                        <td className="px-4 py-2 font-medium text-slate-800">
+                        <td className="px-4 py-2 font-medium text-zinc-800">
                           {equipment.find(
                             (e: any) => e.id === s.equipment_id,
                           )?.nome || "-"}
                         </td>
-                        <td className="px-4 py-2 text-slate-600">
+                        <td className="px-4 py-2 text-zinc-600">
                           {users.find(
                             (u: any) => u.id === s.user_id,
                           )?.nome || "-"}
                         </td>
-                        <td className="px-4 py-2 text-slate-600">
+                        <td className="px-4 py-2 text-zinc-600">
                           {s.destinatario || "-"}
                         </td>
-                        <td className="px-4 py-2 text-slate-600">
+                        <td className="px-4 py-2 text-zinc-600">
                           {new Date(
                             s.data_inicio,
                           ).toLocaleDateString("pt-PT")}
                         </td>
                         <td className="px-4 py-2">
                           {s.status === "ativo" ? (
-                            <span className="rounded bg-cyan-50 px-2 py-0.5 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                            <span className="rounded bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-600 dark:text-red-300">
                               Ativo
                             </span>
                           ) : (
-                            <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">
+                            <span className="rounded bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-600">
                               Devolvido
                             </span>
                           )}
@@ -967,7 +967,7 @@ export function CalendarPage() {
           <DialogFooter>
             <Button
               onClick={() => setIsReportOpen(false)}
-              className="bg-blue-700 hover:bg-[#0a6078]"
+              className="bg-red-600 hover:bg-[#b91c1c]"
             >
               Fechar
             </Button>

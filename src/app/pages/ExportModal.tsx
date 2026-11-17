@@ -207,7 +207,7 @@ export function ExportModal({
             </Select>
           </div>
 
-          <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg text-sm text-blue-900 dark:text-blue-100">
+          <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-lg text-sm text-red-900 dark:text-red-100">
             <div className="flex items-center gap-2">
               <FileText className="w-4 h-4" />
               <span>

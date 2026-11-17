@@ -30,10 +30,10 @@ body { overflow-x: hidden; }
 }
 
 /* Utilitários de composição usados pelos módulos à medida que são redesenhados. */
-.erp-surface { border: 1px solid var(--border); background: var(--card); border-radius: 1rem; box-shadow: 0 10px 30px rgba(16, 33, 63, 0.045); }
+.erp-surface { border: 1px solid var(--border); background: var(--card); border-radius: 1rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05); }
 .dark .erp-surface { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14); }
-.erp-eyebrow { color: #b26a0b; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
-.dark .erp-eyebrow { color: #f7c45e; }
+.erp-eyebrow { color: #dc2626; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; }
+.dark .erp-eyebrow { color: #f87171; }
 .erp-tabular { font-variant-numeric: tabular-nums; }
 .erp-touch-target { min-width: 44px; min-height: 44px; }
 

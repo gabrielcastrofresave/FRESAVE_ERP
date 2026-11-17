@@ -296,7 +296,7 @@ export function ServiceReportsPage() {
     <div className="mx-auto max-w-7xl space-y-7">
       <header className="flex flex-col gap-4 border-b border-border pb-6 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-semibold tracking-[0.14em] text-amber-600 dark:text-amber-300">
+          <p className="text-xs font-semibold tracking-[0.14em] text-red-600 dark:text-red-400">
             ASSISTÊNCIA TÉCNICA
           </p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
@@ -318,7 +318,7 @@ export function ServiceReportsPage() {
           >
             <DialogTrigger asChild>
               <Button
-                className="h-10 bg-blue-700 text-white hover:bg-blue-800"
+                className="h-10 bg-red-600 text-white hover:bg-red-700"
                 onClick={() => setEditingReport(null)}
               >
                 <Plus className="mr-2 h-4 w-4" />
@@ -987,7 +987,7 @@ function ServiceReportForm({
         </Button>
         <Button
           type="submit"
-          className="bg-blue-700 text-white hover:bg-blue-800"
+          className="bg-red-600 text-white hover:bg-red-700"
           disabled={saving}
         >
           {saving && (

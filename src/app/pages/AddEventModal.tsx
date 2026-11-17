@@ -168,7 +168,7 @@ export function AddEventModal({
                   onClick={() => setSelectedUser(user)}
                   className={`w-full text-left px-4 py-2 text-sm transition-colors ${
                     selectedUser?.id === user.id
-                      ? 'bg-blue-600 text-white'
+                      ? 'bg-red-600 text-white'
                       : 'hover:bg-gray-100 dark:hover:bg-gray-700'
                   }`}
                 >

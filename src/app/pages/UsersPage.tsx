@@ -168,7 +168,7 @@ export function UsersPage() {
   const getRoleBadge = (role: UserRole) => {
     const variants: Record<UserRole, string> = {
       administrador: "bg-red-500",
-      escritorio: "bg-blue-500",
+      escritorio: "bg-red-500",
       projeto: "bg-purple-500",
       chefe_producao: "bg-orange-500",
       producao: "bg-green-500",
