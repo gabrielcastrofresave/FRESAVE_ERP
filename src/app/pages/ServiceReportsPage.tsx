@@ -268,11 +268,20 @@ export function ServiceReportsPage() {
     filters.technicianId !== "" ||
     filters.dateFrom !== "" ||
     filters.dateTo !== "";
-  const technicianOptions = [...(users || [])]
-    .filter((u: any) => u.ativo !== false)
-    .sort((a: any, b: any) =>
-      String(a.nome).localeCompare(String(b.nome), "pt"),
-    );
+  const technicianOptions = Array.from(
+    new Map(
+      (users || [])
+        .filter(
+          (u: any) =>
+            u &&
+            u.id != null &&
+            typeof u.nome === "string" &&
+            u.nome.trim() !== "" &&
+            u.ativo !== false,
+        )
+        .map((u: any) => [String(u.id), u] as [string, any]),
+    ).values(),
+  ).sort((a: any, b: any) => a.nome.localeCompare(b.nome, "pt"));
 
   useEffect(() => {
     loadPage();
@@ -774,14 +783,21 @@ function ServiceReportForm({
     ? getDocuments(report).filter((d) => !removedDocIds.includes(d.id))
     : [];
   const hasDocument = files.length > 0 || existingDocs.length > 0;
-  const technicianOptions = [...(users || [])]
-    .filter(
-      (u: any) =>
-        u.ativo !== false || technicianIds.includes(String(u.id)),
-    )
-    .sort((a: any, b: any) =>
-      String(a.nome).localeCompare(String(b.nome), "pt"),
-    );
+  const technicianOptions = Array.from(
+    new Map(
+      (users || [])
+        .filter(
+          (u: any) =>
+            u &&
+            u.id != null &&
+            typeof u.nome === "string" &&
+            u.nome.trim() !== "" &&
+            (u.ativo !== false ||
+              technicianIds.includes(String(u.id))),
+        )
+        .map((u: any) => [String(u.id), u] as [string, any]),
+    ).values(),
+  ).sort((a: any, b: any) => a.nome.localeCompare(b.nome, "pt"));
   const toggleTechnician = (id: string) =>
     setTechnicianIds((current) =>
       current.includes(id)

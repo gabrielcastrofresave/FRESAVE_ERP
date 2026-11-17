@@ -22,6 +22,7 @@ import { useApp } from "./AppContext";
 import { AppProvider } from "./AppContext";
 import { ThemeProvider } from "next-themes";
 import { PageTransition } from "./components/PageTransition";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 function AppContent() {
   const { currentUser, loading } = useApp();
@@ -126,7 +127,9 @@ function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="light">
       <AppProvider>
-        <AppContent />
+        <ErrorBoundary>
+          <AppContent />
+        </ErrorBoundary>
         <PWAInstallBanner />
       </AppProvider>
     </ThemeProvider>
