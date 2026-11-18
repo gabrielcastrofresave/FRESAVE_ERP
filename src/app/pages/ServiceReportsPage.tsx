@@ -332,6 +332,14 @@ const sumDays = (report: ServiceReport) => {
 const formatNumber = (n: number) =>
   String(Math.round(n * 100) / 100).replace(".", ",");
 
+const refParts = (report: ServiceReport) => {
+  const ref = String(report.job?.reference || "");
+  const m = ref.match(/^([A-Za-z][A-Za-z_ ]*?)[\s_\-/]*(\d{4})/);
+  return m
+    ? { type: m[1].replace(/[\s_]+$/, "").toUpperCase(), year: m[2] }
+    : { type: "", year: "" };
+};
+
 interface ObraGroup {
   key: string;
   jobId: string | null;
@@ -409,6 +417,12 @@ export function ServiceReportsPage() {
     technicianId: "",
     dateFrom: "",
     dateTo: "",
+    jobScope: "todas" as "todas" | "com" | "sem",
+    refType: "",
+    refYear: "",
+    files: "todos" as "todos" | "com" | "sem",
+    client: "",
+    sort: "recentes" as "recentes" | "antigas" | "nome",
   });
   const [searchInput, setSearchInput] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -426,7 +440,19 @@ export function ServiceReportsPage() {
     filters.serviceType !== "todos" ||
     filters.technicianId !== "" ||
     filters.dateFrom !== "" ||
-    filters.dateTo !== "";
+    filters.dateTo !== "" ||
+    filters.jobScope !== "todas" ||
+    filters.refType !== "" ||
+    filters.refYear !== "" ||
+    filters.files !== "todos" ||
+    filters.client !== "";
+  const refTypeOptions = Array.from(
+    new Set(reports.map((r) => refParts(r).type).filter(Boolean)),
+  ).sort();
+  const refYearOptions = Array.from(
+    new Set(reports.map((r) => refParts(r).year).filter(Boolean)),
+  ).sort()
+    .reverse();
   const technicianOptions = Array.from(
     new Map(
       (users || [])
@@ -479,6 +505,12 @@ export function ServiceReportsPage() {
       technicianId: "",
       dateFrom: "",
       dateTo: "",
+      jobScope: "todas",
+      refType: "",
+      refYear: "",
+      files: "todos",
+      client: "",
+      sort: "recentes",
     });
     setPage(1);
   };
@@ -512,6 +544,21 @@ export function ServiceReportsPage() {
       !(r.technician_ids || []).map(String).includes(filters.technicianId)
     )
       return false;
+    if (filters.jobScope === "com" && !r.job_id) return false;
+    if (filters.jobScope === "sem" && r.job_id) return false;
+    if (filters.refType || filters.refYear) {
+      const parts = refParts(r);
+      if (filters.refType && parts.type !== filters.refType) return false;
+      if (filters.refYear && parts.year !== filters.refYear) return false;
+    }
+    const nFiles = getDocuments(r).length;
+    if (filters.files === "com" && nFiles === 0) return false;
+    if (filters.files === "sem" && nFiles > 0) return false;
+    if (
+      filters.client &&
+      !getClientName(r).toLowerCase().includes(filters.client.toLowerCase())
+    )
+      return false;
     const start = dayKey(getReportStart(r));
     const end = dayKey(getReportEnd(r));
     if (filters.dateFrom && end < filters.dateFrom) return false;
@@ -534,7 +581,15 @@ export function ServiceReportsPage() {
     return true;
   });
 
-  const groups = buildGroups(reports, visibleReports);
+  const groups = (() => {
+    const list = buildGroups(reports, visibleReports);
+    const sem = list.filter((g) => g.jobId === null);
+    const com = list.filter((g) => g.jobId !== null);
+    if (filters.sort === "antigas") com.reverse();
+    if (filters.sort === "nome")
+      com.sort((a, b) => a.title.localeCompare(b.title, "pt"));
+    return [...com, ...sem];
+  })();
   const total = groups.length;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -710,6 +765,100 @@ export function ServiceReportsPage() {
               </Button>
             )}
           </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[auto_auto_auto_auto_1fr_auto]">
+            <select
+              value={filters.jobScope}
+              onChange={(e) =>
+                changeFilter({
+                  jobScope: e.target.value as typeof filters.jobScope,
+                })
+              }
+              className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              <option value="todas">Com e sem obra</option>
+              <option value="com">Só com obra</option>
+              <option value="sem">Só sem obra</option>
+            </select>
+            <select
+              value={filters.refType}
+              onChange={(e) => changeFilter({ refType: e.target.value })}
+              className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              <option value="">Tipo de Ref.</option>
+              {refTypeOptions.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filters.refYear}
+              onChange={(e) => changeFilter({ refYear: e.target.value })}
+              className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              <option value="">Ano</option>
+              {refYearOptions.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
+            <select
+              value={filters.files}
+              onChange={(e) =>
+                changeFilter({
+                  files: e.target.value as typeof filters.files,
+                })
+              }
+              className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              <option value="todos">Com ou sem ficheiros</option>
+              <option value="com">Com ficheiros</option>
+              <option value="sem">Sem ficheiros</option>
+            </select>
+            <Input
+              value={filters.client}
+              onChange={(e) => changeFilter({ client: e.target.value })}
+              placeholder="Filtrar por cliente"
+              className="h-9"
+            />
+            <select
+              value={filters.sort}
+              onChange={(e) =>
+                changeFilter({
+                  sort: e.target.value as typeof filters.sort,
+                })
+              }
+              className="h-9 rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              <option value="recentes">Obras mais recentes</option>
+              <option value="antigas">Obras mais antigas</option>
+              <option value="nome">Obras por nome</option>
+            </select>
+          </div>
+          {groups.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-muted-foreground">
+                {groups.length} {groups.length === 1 ? "obra" : "obras"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCollapsed(new Set())}
+                className="rounded-md border border-border px-2.5 py-1 font-medium hover:bg-muted"
+              >
+                Mostrar todas as sub-assistências
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setCollapsed(new Set(groups.map((g) => g.key)))
+                }
+                className="rounded-md border border-border px-2.5 py-1 font-medium hover:bg-muted"
+              >
+                Esconder todas
+              </button>
+            </div>
+          )}
         </div>
 
         {loading ? (
