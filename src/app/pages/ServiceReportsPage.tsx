@@ -408,7 +408,7 @@ export function ServiceReportsPage() {
   const [reports, setReports] = useState<ServiceReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState({
     search: "",
     status: "todos" as "terminado" | "por_terminar" | "todos",
@@ -843,16 +843,14 @@ export function ServiceReportsPage() {
               </span>
               <button
                 type="button"
-                onClick={() => setCollapsed(new Set())}
+                onClick={() => setExpanded(new Set(groups.map((g) => g.key)))}
                 className="rounded-md border border-border px-2.5 py-1 font-medium hover:bg-muted"
               >
                 Mostrar todas as sub-assistências
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  setCollapsed(new Set(groups.map((g) => g.key)))
-                }
+                onClick={() => setExpanded(new Set())}
                 className="rounded-md border border-border px-2.5 py-1 font-medium hover:bg-muted"
               >
                 Esconder todas
@@ -874,9 +872,9 @@ export function ServiceReportsPage() {
                 group={group}
                 users={users || []}
                 canEdit={canCreate}
-                open={!collapsed.has(group.key)}
+                open={expanded.has(group.key)}
                 onToggle={() =>
-                  setCollapsed((current) => {
+                  setExpanded((current) => {
                     const next = new Set(current);
                     if (next.has(group.key)) next.delete(group.key);
                     else next.add(group.key);
