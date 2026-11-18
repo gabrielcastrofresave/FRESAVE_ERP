@@ -2187,19 +2187,24 @@ export const serviceReportsAPI = {
     documents?: File[];
     document?: File | null;
   }): Promise<ServiceReport> {
-    // Gera número do relatório (formato: AT-YYYY-NNN)
+    // Gera número do relatório (formato: AT-YYYY-NNN) a partir do maior número já usado nesse ano
     const year = new Date(report.reportDate).getFullYear();
-    const { count } = await supabase
-      .from('service_reports')
-      .select('*', { count: 'exact', head: true })
-      .gte('report_date', `${year}-01-01`)
-      .lt('report_date', `${year + 1}-01-01`);
-
-    const serviceNumber = `AT-${year}-${String((count || 0) + 1).padStart(3, '0')}`;
+    const prefix = `AT-${year}-`;
+    const nextNumber = async (skip: number) => {
+      const { data } = await supabase
+        .from('service_reports')
+        .select('service_number')
+        .like('service_number', `${prefix}%`);
+      const max = (data || []).reduce((m: number, row: any) => {
+        const n = parseInt(String(row.service_number).slice(prefix.length), 10);
+        return Number.isFinite(n) && n > m ? n : m;
+      }, 0);
+      return `${prefix}${String(max + 1 + skip).padStart(3, '0')}`;
+    };
 
     const insertPayload: Record<string, unknown> = {
       job_id: report.jobId || null,
-      service_number: serviceNumber,
+      service_number: '',
       report_date: report.reportDate,
       client_name: report.clientName.trim(),
       start_date: report.startDate,
@@ -2215,11 +2220,18 @@ export const serviceReportsAPI = {
       insertPayload.technician_ids = report.technicianIds;
     }
 
-    const { data: reportData, error: reportError } = await supabase
-      .from('service_reports')
-      .insert(insertPayload)
-      .select()
-      .single();
+    let reportData: any = null;
+    let reportError: any = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      insertPayload.service_number = await nextNumber(attempt);
+      ({ data: reportData, error: reportError } = await supabase
+        .from('service_reports')
+        .insert(insertPayload)
+        .select()
+        .single());
+      // 23505 = número já usado (alguém gravou ao mesmo tempo): tenta o seguinte
+      if (!reportError || reportError.code !== '23505') break;
+    }
 
     if (reportError) throw reportError;
 
@@ -2244,7 +2256,15 @@ export const serviceReportsAPI = {
           }))
         );
 
-      if (daysError) throw daysError;
+      if (daysError) {
+        // Não deixa uma assistência a meio (sem datas): desfaz o registo
+        try {
+          await this.delete(reportData.id);
+        } catch (cleanupError) {
+          console.error('Não foi possível desfazer o registo incompleto:', cleanupError);
+        }
+        throw daysError;
+      }
     }
 
     return await this.getById(reportData.id) as ServiceReport;
