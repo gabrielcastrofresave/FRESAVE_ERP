@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { useApp } from "../AppContext";
-import { serviceReportsAPI, type ServiceReport, type ServiceDocument } from "../api";
+import {
+  serviceReportsAPI,
+  JOB_CLIENT_COLUMN,
+  type ServiceReport,
+  type ServiceDocument,
+} from "../api";
+import { Calendar } from "../components/ui/calendar";
+import { pt } from "date-fns/locale";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -15,8 +22,10 @@ import {
   DialogTrigger,
 } from "../components/ui/dialog";
 import {
+  Building2,
   CalendarRange,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -170,6 +179,30 @@ function downloadServiceReportDoc(
       <p class="section-text">${escapeHtml(report.work_performed)}</p>
       ${report.observations ? `<h2>Observações</h2><p class="section-text">${escapeHtml(report.observations)}</p>` : ""}`;
 
+  const dayList = [...(report.days || [])].sort((a, b) =>
+    String(a.day_date).localeCompare(String(b.day_date)),
+  );
+  const daysTable = dayList.length
+    ? `<h2>Datas e detalhe</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <tr style="background:#f4f4f5;text-align:left;">
+          <th style="padding:6px;">Data</th><th style="padding:6px;">Desloc. (h)</th><th style="padding:6px;">Presença (h)</th><th style="padding:6px;">Km</th><th style="padding:6px;">Alojamento</th><th style="padding:6px;">Materiais</th>
+        </tr>
+        ${dayList
+          .map(
+            (d) => `<tr>
+          <td style="padding:6px;border-bottom:1px solid #e4e4e7;">${formatDate(String(d.day_date).slice(0, 10))}</td>
+          <td style="padding:6px;border-bottom:1px solid #e4e4e7;">${Number(d.travel_hours) || 0}</td>
+          <td style="padding:6px;border-bottom:1px solid #e4e4e7;">${Number(d.presence_hours) || 0}</td>
+          <td style="padding:6px;border-bottom:1px solid #e4e4e7;">${Number(d.kms) || 0}</td>
+          <td style="padding:6px;border-bottom:1px solid #e4e4e7;">${escapeHtml(d.accommodation)}</td>
+          <td style="padding:6px;border-bottom:1px solid #e4e4e7;">${escapeHtml(d.materials)}</td>
+        </tr>`,
+          )
+          .join("")}
+      </table>`
+    : "";
+
   const html = `
     <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">
     <head>
@@ -212,6 +245,7 @@ function downloadServiceReportDoc(
           <tr><td class="meta-label">Tipo</td><td>${serviceTypeLabels[report.service_type]}</td></tr>
           <tr><td class="meta-label">Estado</td><td>${report.status === "terminado" ? "Terminado" : "Por terminar"}</td></tr>
         </table>
+        ${daysTable}
         ${details}
         <div class="footer">
           <div class="brand">FRESAVE</div>
@@ -236,12 +270,137 @@ function downloadServiceReportDoc(
   URL.revokeObjectURL(url);
 }
 
+// ---------- Agrupamento por obra ----------
+
+const SERVICE_TYPE_LABELS = {
+  avaria: "Avaria",
+  preventiva: "Preventiva",
+  garantia: "Garantia",
+} as const;
+
+const dayKey = (value?: string | null) => String(value || "").slice(0, 10);
+
+const keyToDate = (key: string) => {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+};
+
+const dateToKey = (date: Date) =>
+  `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+const formatDayShort = (key: string) =>
+  new Intl.DateTimeFormat("pt-PT", {
+    day: "2-digit",
+    month: "short",
+  }).format(keyToDate(key));
+
+const getReportDayKeys = (report: ServiceReport): string[] => {
+  const keys = (report.days || [])
+    .map((d) => dayKey(d.day_date))
+    .filter(Boolean)
+    .sort();
+  if (keys.length > 0) return Array.from(new Set(keys));
+  const start = dayKey(getReportStart(report));
+  const end = dayKey(getReportEnd(report));
+  if (!start) return [];
+  if (!end || end === start) return [start];
+  // Registo antigo com intervalo: mostra cada dia do intervalo (máx. 62)
+  const out: string[] = [];
+  const cursor = keyToDate(start);
+  const last = keyToDate(end);
+  while (cursor <= last && out.length < 62) {
+    out.push(dateToKey(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return out;
+};
+
+const sumDays = (report: ServiceReport) => {
+  const days = report.days || [];
+  return {
+    hours: days.reduce(
+      (s, d) =>
+        s +
+        (Number(d.travel_hours) || 0) +
+        (Number(d.presence_hours) || 0),
+      0,
+    ),
+    kms: days.reduce((s, d) => s + (Number(d.kms) || 0), 0),
+  };
+};
+
+const formatNumber = (n: number) =>
+  String(Math.round(n * 100) / 100).replace(".", ",");
+
+interface ObraGroup {
+  key: string;
+  jobId: string | null;
+  job: any | null;
+  title: string;
+  reference: string;
+  client: string;
+  all: ServiceReport[];
+  visible: ServiceReport[];
+  status: "terminado" | "por_terminar";
+  latest: string;
+}
+
+function buildGroups(
+  all: ServiceReport[],
+  visible: ServiceReport[],
+): ObraGroup[] {
+  const visibleIds = new Set(visible.map((r) => r.id));
+  const map = new Map<string, ObraGroup>();
+  for (const report of all) {
+    const key = report.job_id || "__sem_obra__";
+    let group = map.get(key);
+    if (!group) {
+      group = {
+        key,
+        jobId: report.job_id || null,
+        job: report.job || null,
+        title: report.job_id
+          ? report.job?.title || "Obra"
+          : "Sem obra",
+        reference: report.job?.reference || "",
+        client: "",
+        all: [],
+        visible: [],
+        status: "terminado",
+        latest: "",
+      };
+      map.set(key, group);
+    }
+    group.all.push(report);
+    if (visibleIds.has(report.id)) group.visible.push(report);
+    if (report.status !== "terminado") group.status = "por_terminar";
+    if (!group.client && report.client_name)
+      group.client = report.client_name;
+    if ((report.created_at || "") > group.latest)
+      group.latest = report.created_at || "";
+  }
+  return Array.from(map.values())
+    .filter((g) => g.visible.length > 0)
+    .map((g) => ({
+      ...g,
+      visible: [...g.visible].sort((a, b) =>
+        getReportStart(b).localeCompare(getReportStart(a)),
+      ),
+    }))
+    .sort((a, b) => {
+      // "Sem obra" vai sempre para o fim
+      if (a.jobId === null) return 1;
+      if (b.jobId === null) return -1;
+      return b.latest.localeCompare(a.latest);
+    });
+}
+
 export function ServiceReportsPage() {
   const { currentUser, users } = useApp();
   const [reports, setReports] = useState<ServiceReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState({
     search: "",
     status: "todos" as "terminado" | "por_terminar" | "todos",
@@ -255,12 +414,12 @@ export function ServiceReportsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingReport, setEditingReport] =
     useState<ServiceReport | null>(null);
+  const [preset, setPreset] = useState<ObraGroup | null>(null);
 
   const canCreate =
     currentUser?.role === "administrador" ||
     currentUser?.role === "projeto" ||
     currentUser?.role === "chefe_producao";
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hasActiveFilters =
     filters.search !== "" ||
     filters.status !== "todos" ||
@@ -284,8 +443,8 @@ export function ServiceReportsPage() {
   ).sort((a: any, b: any) => a.nome.localeCompare(b.nome, "pt"));
 
   useEffect(() => {
-    loadPage();
-  }, [page, filters]);
+    loadAll();
+  }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -295,29 +454,10 @@ export function ServiceReportsPage() {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
-  const loadPage = async () => {
+  const loadAll = async () => {
     setLoading(true);
     try {
-      const result = await serviceReportsAPI.getPage(
-        page,
-        PAGE_SIZE,
-        {
-          search: filters.search || undefined,
-          status:
-            filters.status !== "todos"
-              ? filters.status
-              : undefined,
-          serviceType:
-            filters.serviceType !== "todos"
-              ? filters.serviceType
-              : undefined,
-          technicianId: filters.technicianId || undefined,
-          dateFrom: filters.dateFrom || undefined,
-          dateTo: filters.dateTo || undefined,
-        },
-      );
-      setReports(result.reports);
-      setTotal(result.total);
+      setReports(await serviceReportsAPI.getAll());
     } catch (error) {
       console.error("Erro ao carregar relatórios:", error);
     } finally {
@@ -346,22 +486,70 @@ export function ServiceReportsPage() {
   const handleDelete = async (id: string) => {
     if (
       !confirm(
-        "Eliminar este relatório de assistência e o documento associado?",
+        "Eliminar esta sub-assistência e os documentos associados?",
       )
     )
       return;
     try {
       await serviceReportsAPI.delete(id);
-      await loadPage();
+      await loadAll();
     } catch (error) {
       console.error("Erro ao eliminar relatório:", error);
-      alert("Não foi possível eliminar o relatório.");
+      alert("Não foi possível eliminar a sub-assistência.");
     }
   };
 
-  const firstShown =
-    total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const lastShown = Math.min(page * PAGE_SIZE, total);
+  const visibleReports = reports.filter((r) => {
+    if (filters.status !== "todos" && r.status !== filters.status)
+      return false;
+    if (
+      filters.serviceType !== "todos" &&
+      r.service_type !== filters.serviceType
+    )
+      return false;
+    if (
+      filters.technicianId &&
+      !(r.technician_ids || []).map(String).includes(filters.technicianId)
+    )
+      return false;
+    const start = dayKey(getReportStart(r));
+    const end = dayKey(getReportEnd(r));
+    if (filters.dateFrom && end < filters.dateFrom) return false;
+    if (filters.dateTo && start > filters.dateTo) return false;
+    if (filters.search) {
+      const q = filters.search.toLowerCase();
+      const hay = [
+        r.service_number,
+        r.client_name,
+        r.observations,
+        r.work_performed,
+        r.job?.title,
+        r.job?.reference,
+        r.job_id ? "" : "sem obra",
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  const groups = buildGroups(reports, visibleReports);
+  const total = groups.length;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageGroups = groups.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
+  const firstShown = total === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const lastShown = Math.min(currentPage * PAGE_SIZE, total);
+
+  const openNew = (group: ObraGroup | null) => {
+    setEditingReport(null);
+    setPreset(group);
+    setCreateOpen(true);
+  };
 
   return (
     <div className="mx-auto max-w-7xl space-y-7">
@@ -371,51 +559,62 @@ export function ServiceReportsPage() {
             ASSISTÊNCIA TÉCNICA
           </p>
           <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            Relatórios de Assistências
+            Assistências por Obra
           </h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-            Registe o cliente, o período da assistência e o que
-            foi gasto. Se anexar um documento, só precisa de
-            indicar o cliente e as datas.
+            Cada obra tem uma assistência, com as sub-assistências lá
+            dentro. Em cada sub-assistência escolhe várias datas de
+            uma vez e indica horas, km, alojamento e materiais por
+            data.
           </p>
         </div>
         {canCreate && (
-          <Dialog
-            open={createOpen}
-            onOpenChange={(open) => {
-              setCreateOpen(open);
-              if (!open) setEditingReport(null);
-            }}
+          <Button
+            className="h-10 bg-red-600 text-white hover:bg-red-700"
+            onClick={() => openNew(null)}
           >
-            <DialogTrigger asChild>
-              <Button
-                className="h-10 bg-red-600 text-white hover:bg-red-700"
-                onClick={() => setEditingReport(null)}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Nova assistência
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-h-[90vh] !max-w-6xl overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingReport
-                    ? "Editar assistência"
+            <Plus className="mr-2 h-4 w-4" />
+            Nova assistência
+          </Button>
+        )}
+      </header>
+
+      {canCreate && (
+        <Dialog
+          open={createOpen}
+          onOpenChange={(open) => {
+            setCreateOpen(open);
+            if (!open) {
+              setEditingReport(null);
+              setPreset(null);
+            }
+          }}
+        >
+          <DialogContent className="max-h-[90vh] !max-w-6xl overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                {editingReport
+                  ? "Editar sub-assistência"
+                  : preset
+                    ? `Nova sub-assistência · ${preset.title}`
                     : "Registar assistência"}
-                </DialogTitle>
-              </DialogHeader>
+              </DialogTitle>
+            </DialogHeader>
+            {createOpen && (
               <ServiceReportForm
                 report={editingReport}
+                preset={preset}
                 onClose={() => {
                   setCreateOpen(false);
                   setEditingReport(null);
+                  setPreset(null);
                 }}
-                onSaved={loadPage}
+                onSaved={loadAll}
               />
-            </DialogContent>
-          </Dialog>
-        )}
-      </header>
+            )}
+          </DialogContent>
+        </Dialog>
+      )}
 
       <section className="overflow-hidden erp-surface">
         <div className="space-y-3 border-b border-zinc-100 px-5 py-4 dark:border-zinc-800">
@@ -424,9 +623,7 @@ export function ServiceReportsPage() {
               <button
                 key={option.value}
                 type="button"
-                onClick={() =>
-                  changeFilter({ status: option.value })
-                }
+                onClick={() => changeFilter({ status: option.value })}
                 className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   filters.status === option.value
                     ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
@@ -442,10 +639,8 @@ export function ServiceReportsPage() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
               <Input
                 value={searchInput}
-                onChange={(event) =>
-                  setSearchInput(event.target.value)
-                }
-                placeholder="Pesquisar por cliente, número ou observações"
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="Pesquisar por obra, cliente, número ou observações"
                 className="pl-9"
               />
             </div>
@@ -475,7 +670,7 @@ export function ServiceReportsPage() {
             >
               <option value="">Todos Func.</option>
               {technicianOptions.map((u: any) => (
-                <option key={u.id} value={u.id}>
+                <option key={u.id} value={String(u.id)}>
                   {u.nome}
                 </option>
               ))}
@@ -522,22 +717,30 @@ export function ServiceReportsPage() {
             <Loader2 className="mr-2 h-4 w-4 animate-spin" /> A
             carregar assistências…
           </div>
-        ) : reports.length ? (
+        ) : pageGroups.length ? (
           <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
-            {reports.map((report) => (
-              <ReportRow
-                key={report.id}
-                report={report}
+            {pageGroups.map((group) => (
+              <ObraGroupCard
+                key={group.key}
+                group={group}
+                users={users || []}
                 canEdit={canCreate}
-                onEdit={() => {
+                open={!collapsed.has(group.key)}
+                onToggle={() =>
+                  setCollapsed((current) => {
+                    const next = new Set(current);
+                    if (next.has(group.key)) next.delete(group.key);
+                    else next.add(group.key);
+                    return next;
+                  })
+                }
+                onAdd={() => openNew(group)}
+                onEdit={(report) => {
+                  setPreset(null);
                   setEditingReport(report);
                   setCreateOpen(true);
                 }}
-                onDelete={() => handleDelete(report.id)}
-                users={users || []}
-                onDownload={() =>
-                  downloadServiceReportDoc(report, users || [])
-                }
+                onDelete={handleDelete}
               />
             ))}
           </div>
@@ -555,7 +758,7 @@ export function ServiceReportsPage() {
         {total > 0 && (
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-100 px-5 py-3 dark:border-zinc-800">
             <p className="text-xs text-muted-foreground">
-              {firstShown}–{lastShown} de {total}
+              {firstShown}–{lastShown} de {total} obras
             </p>
             <div className="flex items-center gap-1">
               <Button
@@ -563,29 +766,23 @@ export function ServiceReportsPage() {
                 variant="outline"
                 size="sm"
                 className="h-8"
-                disabled={page <= 1 || loading}
-                onClick={() =>
-                  setPage((current) => current - 1)
-                }
+                disabled={currentPage <= 1 || loading}
+                onClick={() => setPage(currentPage - 1)}
               >
-                <ChevronLeft className="mr-1 h-4 w-4" />{" "}
-                Anterior
+                <ChevronLeft className="mr-1 h-4 w-4" /> Anterior
               </Button>
               <span className="px-3 text-xs text-muted-foreground">
-                Página {page} de {totalPages}
+                Página {currentPage} de {totalPages}
               </span>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="h-8"
-                disabled={page >= totalPages || loading}
-                onClick={() =>
-                  setPage((current) => current + 1)
-                }
+                disabled={currentPage >= totalPages || loading}
+                onClick={() => setPage(currentPage + 1)}
               >
-                Seguinte{" "}
-                <ChevronRight className="ml-1 h-4 w-4" />
+                Seguinte <ChevronRight className="ml-1 h-4 w-4" />
               </Button>
             </div>
           </div>
@@ -595,7 +792,107 @@ export function ServiceReportsPage() {
   );
 }
 
-function ReportRow({
+const STATUS_BADGE = {
+  terminado:
+    "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400",
+  por_terminar:
+    "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400",
+} as const;
+
+function ObraGroupCard({
+  group,
+  users,
+  canEdit,
+  open,
+  onToggle,
+  onAdd,
+  onEdit,
+  onDelete,
+}: {
+  group: ObraGroup;
+  users: Array<{ id: string; nome: string }>;
+  canEdit: boolean;
+  open: boolean;
+  onToggle: () => void;
+  onAdd: () => void;
+  onEdit: (report: ServiceReport) => void;
+  onDelete: (id: string) => void;
+}) {
+  const semObra = group.jobId === null;
+  const pending = group.all.filter((r) => r.status !== "terminado").length;
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-3 bg-zinc-50/70 px-5 py-4 dark:bg-zinc-800/30">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900">
+            <Building2 className="h-4 w-4" />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate font-semibold text-zinc-900 dark:text-zinc-50">
+              {group.title}
+            </span>
+            <span className="block truncate text-xs text-muted-foreground">
+              {semObra
+                ? "Assistências antigas ou não associadas a uma obra"
+                : [group.reference, group.client]
+                    .filter(Boolean)
+                    .join(" · ")}
+            </span>
+          </span>
+          <ChevronDown
+            className={`ml-1 h-4 w-4 shrink-0 text-zinc-400 transition-transform ${open ? "" : "-rotate-90"}`}
+          />
+        </button>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge className="border-zinc-200 bg-white text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+            {group.all.length}{" "}
+            {group.all.length === 1
+              ? "sub-assistência"
+              : "sub-assistências"}
+          </Badge>
+          <Badge className={STATUS_BADGE[group.status]}>
+            {group.status === "terminado"
+              ? "Terminada"
+              : `Por terminar${pending > 1 ? ` (${pending})` : ""}`}
+          </Badge>
+          {canEdit && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={onAdd}
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" /> Sub-assistência
+            </Button>
+          )}
+        </div>
+      </div>
+      {open && (
+        <div className="divide-y divide-zinc-100 dark:divide-zinc-800">
+          {group.visible.map((report) => (
+            <SubRow
+              key={report.id}
+              report={report}
+              users={users}
+              canEdit={canEdit}
+              onEdit={() => onEdit(report)}
+              onDelete={() => onDelete(report.id)}
+              onDownload={() => downloadServiceReportDoc(report, users)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SubRow({
   report,
   canEdit,
   onEdit,
@@ -610,144 +907,221 @@ function ReportRow({
   onDelete: () => void;
   onDownload: () => void;
 }) {
-  const serviceTypeLabels = {
-    avaria: "Avaria",
-    preventiva: "Preventiva",
-    garantia: "Garantia",
-  };
+  const [showDays, setShowDays] = useState(false);
   const documents = getDocuments(report);
   const technicianNames = getTechnicianNames(report, users);
+  const dayKeys = getReportDayKeys(report);
+  const totals = sumDays(report);
+  const hasDetail = (report.days || []).length > 0;
   return (
-    <div className="p-5">
-      <div className="flex gap-3">
-        <div className="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-          <Wrench className="h-4 w-4" />
+    <div className="py-4 pl-8 pr-5 sm:pl-12">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 font-medium text-zinc-800 dark:text-zinc-100">
+            <Wrench className="h-3.5 w-3.5 text-red-500" />
+            <span className="font-mono text-xs text-zinc-500">
+              {report.service_number}
+            </span>
+          </p>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">
+            {getClientName(report)}
+          </p>
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="font-medium text-zinc-800 dark:text-zinc-100">
-                {getClientName(report)}
-              </p>
-              <p className="mt-1 font-mono text-xs text-zinc-400">
-                {report.service_number}
-              </p>
-              {report.job && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Serviço:{" "}
-                  <span className="font-mono">
-                    {report.job.reference}
-                  </span>
-                  {report.job.title
-                    ? ` · ${report.job.title}`
-                    : ""}
-                </p>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {documents.length > 0 && (
-                <Badge className="border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400">
-                  <Paperclip className="mr-1 h-3 w-3" />{" "}
-                  {documents.length === 1
-                    ? "1 ficheiro"
-                    : `${documents.length} ficheiros`}
-                </Badge>
-              )}
-              <Badge className="border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                {serviceTypeLabels[report.service_type]}
-              </Badge>
-              <Badge
-                className={
-                  report.status === "terminado"
-                    ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-400"
-                    : "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-400"
-                }
-              >
-                {report.status === "terminado"
-                  ? "Terminado"
-                  : "Por terminar"}
-              </Badge>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {documents.length > 0 && (
+            <Badge className={STATUS_BADGE.terminado}>
+              <Paperclip className="mr-1 h-3 w-3" />{" "}
+              {documents.length === 1
+                ? "1 ficheiro"
+                : `${documents.length} ficheiros`}
+            </Badge>
+          )}
+          <Badge className="border-zinc-200 bg-zinc-50 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
+            {SERVICE_TYPE_LABELS[report.service_type]}
+          </Badge>
+          <Badge className={STATUS_BADGE[report.status]}>
+            {report.status === "terminado" ? "Terminado" : "Por terminar"}
+          </Badge>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 text-zinc-400"
+            onClick={onDownload}
+            aria-label="Exportar para Word"
+          >
+            <Download className="h-3.5 w-3.5" />
+          </Button>
+          {canEdit && (
+            <>
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7 text-zinc-400"
-                onClick={onDownload}
-                aria-label="Exportar para Word"
+                onClick={onEdit}
+                aria-label="Editar sub-assistência"
               >
-                <Download className="h-3.5 w-3.5" />
+                <Pencil className="h-3.5 w-3.5" />
               </Button>
-              {canEdit && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-zinc-400"
-                    onClick={onEdit}
-                    aria-label="Editar assistência"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-zinc-400 hover:bg-red-50 hover:text-red-600"
-                    onClick={onDelete}
-                    aria-label="Eliminar assistência"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5 font-medium text-zinc-700 dark:text-zinc-300">
-              <CalendarRange className="h-3.5 w-3.5 text-red-500" />
-              {formatDate(getReportStart(report))} —{" "}
-              {formatDate(getReportEnd(report))}
-            </span>
-            {technicianNames.length > 0 && (
-              <span className="flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5 text-red-500" />
-                {technicianNames.join(", ")}
-              </span>
-            )}
-            {documents.length === 0 && report.expenses_text && (
-              <span className="line-clamp-1 max-w-xl">
-                Gasto: {report.expenses_text}
-              </span>
-            )}
-          </div>
-          {documents.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {documents.map((doc) => (
-                <a
-                  key={doc.id}
-                  href={doc.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={doc.name}
-                  className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-red-300 hover:text-red-600"
-                >
-                  <Paperclip className="h-3 w-3 shrink-0 text-red-500" />
-                  <span className="truncate">{doc.name}</span>
-                  <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
-                </a>
-              ))}
-            </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-zinc-400 hover:bg-red-50 hover:text-red-600"
+                onClick={onDelete}
+                aria-label="Eliminar sub-assistência"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </>
           )}
         </div>
       </div>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {dayKeys.map((key) => (
+          <span
+            key={key}
+            className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300"
+          >
+            {formatDayShort(key)}
+          </span>
+        ))}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
+        {technicianNames.length > 0 && (
+          <span className="flex items-center gap-1.5">
+            <Users className="h-3.5 w-3.5 text-red-500" />
+            {technicianNames.join(", ")}
+          </span>
+        )}
+        {hasDetail && (
+          <span>
+            {formatNumber(totals.hours)} h · {formatNumber(totals.kms)} km
+          </span>
+        )}
+        {documents.length === 0 && report.expenses_text && (
+          <span className="line-clamp-1 max-w-xl">
+            Gasto: {report.expenses_text}
+          </span>
+        )}
+        {hasDetail && (
+          <button
+            type="button"
+            onClick={() => setShowDays((v) => !v)}
+            className="font-medium text-red-600 hover:underline dark:text-red-400"
+          >
+            {showDays ? "Esconder detalhe por data" : "Ver detalhe por data"}
+          </button>
+        )}
+      </div>
+
+      {showDays && hasDetail && (
+        <div className="mt-3 overflow-x-auto rounded-lg border border-border">
+          <table className="w-full min-w-[34rem] text-left text-xs">
+            <thead className="bg-muted/50 text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 font-medium">Data</th>
+                <th className="px-3 py-2 font-medium">Desloc. (h)</th>
+                <th className="px-3 py-2 font-medium">Presença (h)</th>
+                <th className="px-3 py-2 font-medium">Km</th>
+                <th className="px-3 py-2 font-medium">Alojamento</th>
+                <th className="px-3 py-2 font-medium">Materiais</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {[...(report.days || [])]
+                .sort((a, b) =>
+                  dayKey(a.day_date).localeCompare(dayKey(b.day_date)),
+                )
+                .map((d) => (
+                  <tr key={d.id || d.day_date}>
+                    <td className="px-3 py-2 font-medium">
+                      {formatDate(dayKey(d.day_date))}
+                    </td>
+                    <td className="px-3 py-2">{formatNumber(Number(d.travel_hours) || 0)}</td>
+                    <td className="px-3 py-2">{formatNumber(Number(d.presence_hours) || 0)}</td>
+                    <td className="px-3 py-2">{formatNumber(Number(d.kms) || 0)}</td>
+                    <td className="px-3 py-2">{d.accommodation || "—"}</td>
+                    <td className="px-3 py-2">{d.materials || "—"}</td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {documents.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {documents.map((doc) => (
+            <a
+              key={doc.id}
+              href={doc.url}
+              target="_blank"
+              rel="noreferrer"
+              title={doc.name}
+              className="inline-flex max-w-[16rem] items-center gap-1.5 rounded-full border border-border bg-muted/50 px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:border-red-300 hover:text-red-600"
+            >
+              <Paperclip className="h-3 w-3 shrink-0 text-red-500" />
+              <span className="truncate">{doc.name}</span>
+              <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
+interface DayRow {
+  travelHours: string;
+  presenceHours: string;
+  kms: string;
+  accommodation: string;
+  materials: string;
+}
+
+const emptyDayRow = (): DayRow => ({
+  travelHours: "",
+  presenceHours: "",
+  kms: "",
+  accommodation: "",
+  materials: "",
+});
+
+const toNum = (v: string) => {
+  const n = parseFloat(String(v).replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
+function initialDayRows(report: ServiceReport | null): Record<string, DayRow> {
+  const rows: Record<string, DayRow> = {};
+  if (!report) return rows;
+  const byKey = new Map(
+    (report.days || []).map((d) => [dayKey(d.day_date), d]),
+  );
+  for (const key of getReportDayKeys(report)) {
+    const d = byKey.get(key);
+    rows[key] = d
+      ? {
+          travelHours: d.travel_hours ? String(d.travel_hours) : "",
+          presenceHours: d.presence_hours ? String(d.presence_hours) : "",
+          kms: d.kms ? String(d.kms) : "",
+          accommodation: d.accommodation || "",
+          materials: d.materials || "",
+        }
+      : emptyDayRow();
+  }
+  return rows;
+}
+
 function ServiceReportForm({
   report,
+  preset,
   onClose,
   onSaved,
 }: {
   report: ServiceReport | null;
+  preset: ObraGroup | null;
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
@@ -758,15 +1132,14 @@ function ServiceReportForm({
   const [technicianIds, setTechnicianIds] = useState<string[]>(
     (report?.technician_ids || []).map(String),
   );
+  const [dayRows, setDayRows] = useState<Record<string, DayRow>>(
+    () => initialDayRows(report),
+  );
   const [form, setForm] = useState({
-    jobId: report?.job_id || "",
-    clientName: report ? getClientName(report) : "",
-    startDate: report
-      ? toDateInput(getReportStart(report))
-      : toDateInput(),
-    endDate: report
-      ? toDateInput(getReportEnd(report))
-      : toDateInput(),
+    jobId: report?.job_id || preset?.jobId || "",
+    clientName: report
+      ? getClientName(report)
+      : preset?.client || "",
     serviceType:
       report?.service_type ||
       ("avaria" as "avaria" | "preventiva" | "garantia"),
@@ -806,6 +1179,22 @@ function ServiceReportForm({
     );
   const update = (key: keyof typeof form, value: string) =>
     setForm((current) => ({ ...current, [key]: value }));
+  const selectedKeys = Object.keys(dayRows).sort();
+  const lockedObra = !report && preset?.jobId ? preset : null;
+
+  const onSelectDates = (dates: Date[] | undefined) => {
+    const keys = (dates || []).map(dateToKey);
+    setDayRows((current) => {
+      const next: Record<string, DayRow> = {};
+      for (const key of keys) next[key] = current[key] || emptyDayRow();
+      return next;
+    });
+  };
+  const updateDay = (key: string, patch: Partial<DayRow>) =>
+    setDayRows((current) => ({
+      ...current,
+      [key]: { ...(current[key] || emptyDayRow()), ...patch },
+    }));
 
   const selectFiles = (selected: FileList | null) => {
     if (!selected || selected.length === 0) return;
@@ -831,10 +1220,8 @@ function ServiceReportForm({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (form.endDate < form.startDate) {
-      alert(
-        "A data final não pode ser anterior à data inicial.",
-      );
+    if (selectedKeys.length === 0) {
+      alert("Escolha pelo menos uma data no calendário.");
       return;
     }
     if (
@@ -854,13 +1241,13 @@ function ServiceReportForm({
       jobId: form.jobId || undefined,
       clientName: form.clientName,
       startDate: new Date(
-        `${form.startDate}T12:00:00`,
+        `${selectedKeys[0]}T12:00:00`,
       ).toISOString(),
       endDate: new Date(
-        `${form.endDate}T12:00:00`,
+        `${selectedKeys[selectedKeys.length - 1]}T12:00:00`,
       ).toISOString(),
       reportDate: new Date(
-        `${form.endDate}T12:00:00`,
+        `${selectedKeys[selectedKeys.length - 1]}T12:00:00`,
       ).toISOString(),
       serviceType: form.serviceType,
       expensesText: form.expensesText,
@@ -868,7 +1255,14 @@ function ServiceReportForm({
       workPerformed: form.workPerformed,
       observations: form.observations,
       status: form.status,
-      days: [],
+      days: selectedKeys.map((key) => ({
+        dayDate: key,
+        travelHours: toNum(dayRows[key].travelHours),
+        presenceHours: toNum(dayRows[key].presenceHours),
+        kms: toNum(dayRows[key].kms),
+        accommodation: dayRows[key].accommodation.trim(),
+        materials: dayRows[key].materials.trim(),
+      })),
       technicianIds,
       documents: files,
     };
@@ -911,44 +1305,207 @@ function ServiceReportForm({
             required
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="startDate">Assistência de *</Label>
-          <Input
-            id="startDate"
-            type="date"
-            value={form.startDate}
-            onChange={(event) =>
-              update("startDate", event.target.value)
-            }
-            required
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="endDate">Até *</Label>
-          <Input
-            id="endDate"
-            type="date"
-            min={form.startDate}
-            value={form.endDate}
-            onChange={(event) =>
-              update("endDate", event.target.value)
-            }
-            required
-          />
-        </div>
         <div className="space-y-2 sm:col-span-2">
           <div>
-            <Label>Serviço / Job</Label>
+            <Label>Obra (serviço / job)</Label>
             <p className="mt-0.5 text-xs text-muted-foreground">
-              Facultativo — pode associar a PROD, PROD_INT ou
-              outro tipo de job.
+              {lockedObra
+                ? "Esta sub-assistência fica dentro da obra abaixo."
+                : "Facultativo — sem obra, fica na secção “Sem obra”. Pode associar a PROD, PROD_INT ou outro tipo de job."}
             </p>
           </div>
-          <JobSearchPicker
-            value={form.jobId}
-            onChange={(jobId) => update("jobId", jobId)}
-            knownJobs={report?.job ? [report.job] : []}
-          />
+          {lockedObra ? (
+            <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 dark:border-red-900 dark:bg-red-950/30">
+              <p className="text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                {lockedObra.title}
+              </p>
+              {lockedObra.reference && (
+                <p className="font-mono text-[11px] text-zinc-500 dark:text-zinc-400">
+                  {lockedObra.reference}
+                </p>
+              )}
+            </div>
+          ) : (
+            <JobSearchPicker
+              value={form.jobId}
+              onChange={(jobId) => update("jobId", jobId)}
+              onPickJob={(job) => {
+                const c = JOB_CLIENT_COLUMN
+                  ? (job?.[JOB_CLIENT_COLUMN] as string)
+                  : "";
+                setForm((current) =>
+                  current.clientName.trim() || !c
+                    ? current
+                    : { ...current, clientName: c },
+                );
+              }}
+              knownJobs={report?.job ? [report.job] : []}
+            />
+          )}
+        </div>
+        <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="serviceType">Tipo de assistência</Label>
+            <select
+              id="serviceType"
+              value={form.serviceType}
+              onChange={(event) =>
+                update("serviceType", event.target.value)
+              }
+              className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              {SERVICE_TYPES.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="status">Estado</Label>
+            <select
+              id="status"
+              value={form.status}
+              onChange={(event) => update("status", event.target.value)}
+              className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
+            >
+              <option value="por_terminar">Por terminar</option>
+              <option value="terminado">Terminado</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border p-4">
+        <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <CalendarRange className="h-4 w-4 text-red-500" /> Datas da
+          sub-assistência *
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Clique em vários dias do calendário. Para cada data pode
+          indicar horas de deslocação e de presença, km, alojamento e
+          materiais.
+        </p>
+        <div className="mt-3 grid gap-4 lg:grid-cols-[auto_1fr]">
+          <div className="justify-self-start rounded-lg border border-border">
+            <Calendar
+              mode="multiple"
+              locale={pt}
+              weekStartsOn={1}
+              selected={selectedKeys.map(keyToDate)}
+              onSelect={onSelectDates}
+              defaultMonth={
+                selectedKeys[0] ? keyToDate(selectedKeys[0]) : undefined
+              }
+            />
+          </div>
+          <div className="min-w-0 space-y-3">
+            {selectedKeys.length === 0 && (
+              <p className="rounded-lg border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+                Ainda não escolheu nenhuma data.
+              </p>
+            )}
+            {selectedKeys.map((key) => {
+              const row = dayRows[key] || emptyDayRow();
+              return (
+                <div
+                  key={key}
+                  className="rounded-lg border border-border bg-muted/30 p-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-foreground">
+                      {formatDate(key)}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDayRows((current) => {
+                          const next = { ...current };
+                          delete next[key];
+                          return next;
+                        })
+                      }
+                      className="text-xs text-muted-foreground hover:text-red-600"
+                    >
+                      Remover data
+                    </button>
+                  </div>
+                  <div className="mt-2 grid grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">
+                        Desloc. (h)
+                      </Label>
+                      <Input
+                        inputMode="decimal"
+                        value={row.travelHours}
+                        onChange={(e) =>
+                          updateDay(key, { travelHours: e.target.value })
+                        }
+                        className="h-8"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">
+                        Presença (h)
+                      </Label>
+                      <Input
+                        inputMode="decimal"
+                        value={row.presenceHours}
+                        onChange={(e) =>
+                          updateDay(key, { presenceHours: e.target.value })
+                        }
+                        className="h-8"
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">
+                        Km
+                      </Label>
+                      <Input
+                        inputMode="decimal"
+                        value={row.kms}
+                        onChange={(e) =>
+                          updateDay(key, { kms: e.target.value })
+                        }
+                        className="h-8"
+                        placeholder="0"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">
+                        Alojamento
+                      </Label>
+                      <Input
+                        value={row.accommodation}
+                        onChange={(e) =>
+                          updateDay(key, { accommodation: e.target.value })
+                        }
+                        className="h-8"
+                        placeholder="Hotel, noites…"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] text-muted-foreground">
+                        Materiais
+                      </Label>
+                      <Input
+                        value={row.materials}
+                        onChange={(e) =>
+                          updateDay(key, { materials: e.target.value })
+                        }
+                        className="h-8"
+                        placeholder="Materiais usados"
+                      />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </section>
 
@@ -1115,43 +1672,6 @@ function ServiceReportForm({
               anexado.
             </p>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="serviceType">
-                Tipo de assistência
-              </Label>
-              <select
-                id="serviceType"
-                value={form.serviceType}
-                onChange={(event) =>
-                  update("serviceType", event.target.value)
-                }
-                className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
-              >
-                {SERVICE_TYPES.map((type) => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="status">Estado</Label>
-              <select
-                id="status"
-                value={form.status}
-                onChange={(event) =>
-                  update("status", event.target.value)
-                }
-                className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
-              >
-                <option value="por_terminar">
-                  Por terminar
-                </option>
-                <option value="terminado">Terminado</option>
-              </select>
-            </div>
-          </div>
           <div className="space-y-2">
             <Label htmlFor="expensesText">
               O que foi gasto? *
@@ -1232,7 +1752,7 @@ function ServiceReportForm({
           {saving && (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           )}
-          {report ? "Guardar alterações" : "Criar assistência"}
+          {report ? "Guardar alterações" : "Criar sub-assistência"}
         </Button>
       </div>
     </form>
