@@ -339,6 +339,10 @@ export function JobsPage() {
   const canCreate =
     currentUser?.role === "administrador" ||
     currentUser?.role === "projeto";
+  const canDelete =
+    currentUser?.role === "administrador" ||
+    currentUser?.role === "escritorio" ||
+    currentUser?.role === "projeto";
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hasActiveFilters =
@@ -761,6 +765,7 @@ export function JobsPage() {
                   )}
                   checklistComplete={isChecklistComplete(job)}
                   canEdit={canCreate}
+                  canDelete={canDelete}
                   onToggleStage={(key, checked) =>
                     handleToggleStage(job.id, key, checked)
                   }
@@ -931,6 +936,7 @@ function ActiveJob({
   hoursConsumed,
   checklistComplete,
   canEdit,
+  canDelete,
   onToggleStage,
   onComplete,
   onEdit,
@@ -941,6 +947,7 @@ function ActiveJob({
   hoursConsumed: number;
   checklistComplete: boolean;
   canEdit: boolean;
+  canDelete: boolean;
   onToggleStage: (stageKey: string, checked: boolean) => void;
   onComplete: () => void;
   onEdit: () => void;
@@ -1006,15 +1013,18 @@ function ActiveJob({
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:text-zinc-500 dark:hover:bg-red-950/30 dark:hover:text-red-400"
-                    onClick={onDelete}
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
                 </>
+              )}
+              {canDelete && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:text-zinc-500 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+                  onClick={onDelete}
+                  aria-label="Eliminar trabalho"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
               )}
             </div>
           </div>

@@ -86,6 +86,10 @@ export function SchedulesPage() {
   const canManage =
     currentUser?.role === "administrador" ||
     currentUser?.role === "projeto";
+  const canDelete =
+    currentUser?.role === "administrador" ||
+    currentUser?.role === "escritorio" ||
+    currentUser?.role === "projeto";
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hasActiveFilters =
@@ -307,6 +311,7 @@ export function SchedulesPage() {
                 key={schedule.id}
                 schedule={schedule}
                 canEdit={canManage}
+                canDelete={canDelete}
                 onEdit={() => {
                   setEditing(schedule);
                   setCreateOpen(true);
@@ -386,11 +391,13 @@ export function SchedulesPage() {
 function ScheduleRow({
   schedule,
   canEdit,
+  canDelete,
   onEdit,
   onDelete,
 }: {
   schedule: any;
   canEdit: boolean;
+  canDelete: boolean;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -418,24 +425,28 @@ function ScheduleRow({
         </Badge>
       )}
 
-      {canEdit && (
+      {(canEdit || canDelete) && (
         <div className="flex items-center">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
-            onClick={onEdit}
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:text-zinc-500 dark:hover:bg-red-950/30 dark:hover:text-red-400"
-            onClick={onDelete}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+          {canEdit && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 dark:text-zinc-500 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+              onClick={onEdit}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {canDelete && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-zinc-400 hover:bg-red-50 hover:text-red-600 dark:text-zinc-500 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+              onClick={onDelete}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
         </div>
       )}
     </div>

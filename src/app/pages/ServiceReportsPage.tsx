@@ -435,6 +435,10 @@ export function ServiceReportsPage() {
     currentUser?.role === "escritorio" ||
     currentUser?.role === "projeto" ||
     currentUser?.role === "producao";
+  const canDelete =
+    currentUser?.role === "administrador" ||
+    currentUser?.role === "escritorio" ||
+    currentUser?.role === "projeto";
   const hasActiveFilters =
     filters.search !== "" ||
     filters.status !== "todos" ||
@@ -873,6 +877,7 @@ export function ServiceReportsPage() {
                 group={group}
                 users={users || []}
                 canEdit={canCreate}
+                canDelete={canDelete}
                 open={expanded.has(group.key)}
                 onToggle={() =>
                   setExpanded((current) => {
@@ -951,6 +956,7 @@ function ObraGroupCard({
   group,
   users,
   canEdit,
+  canDelete,
   open,
   onToggle,
   onAdd,
@@ -960,6 +966,7 @@ function ObraGroupCard({
   group: ObraGroup;
   users: Array<{ id: string; nome: string }>;
   canEdit: boolean;
+  canDelete: boolean;
   open: boolean;
   onToggle: () => void;
   onAdd: () => void;
@@ -1029,6 +1036,7 @@ function ObraGroupCard({
               report={report}
               users={users}
               canEdit={canEdit}
+              canDelete={canDelete}
               onEdit={() => onEdit(report)}
               onDelete={() => onDelete(report.id)}
               onDownload={() => downloadServiceReportDoc(report, users)}
@@ -1043,6 +1051,7 @@ function ObraGroupCard({
 function SubRow({
   report,
   canEdit,
+  canDelete,
   onEdit,
   onDelete,
   onDownload,
@@ -1051,6 +1060,7 @@ function SubRow({
   report: ServiceReport;
   users: Array<{ id: string; nome: string }>;
   canEdit: boolean;
+  canDelete: boolean;
   onEdit: () => void;
   onDelete: () => void;
   onDownload: () => void;
@@ -1100,26 +1110,26 @@ function SubRow({
             <Download className="h-3.5 w-3.5" />
           </Button>
           {canEdit && (
-            <>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-zinc-400"
-                onClick={onEdit}
-                aria-label="Editar sub-assistência"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-zinc-400 hover:bg-red-50 hover:text-red-600"
-                onClick={onDelete}
-                aria-label="Eliminar sub-assistência"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-zinc-400"
+              onClick={onEdit}
+              aria-label="Editar sub-assistência"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+          )}
+          {canDelete && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-zinc-400 hover:bg-red-50 hover:text-red-600"
+              onClick={onDelete}
+              aria-label="Eliminar sub-assistência"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
           )}
         </div>
       </div>
