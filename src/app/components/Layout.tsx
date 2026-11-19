@@ -96,6 +96,7 @@ export function Layout({
         "administrador",
         "escritorio",
         "projeto",
+        "producao",
       ],
       items: [],
     },
