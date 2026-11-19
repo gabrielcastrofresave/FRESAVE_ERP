@@ -83,7 +83,7 @@ export function Layout({
         "administrador",
         "escritorio",
         "projeto",
-        "chefe_producao",
+        "producao",
       ],
       items: [],
     },
@@ -96,8 +96,6 @@ export function Layout({
         "administrador",
         "escritorio",
         "projeto",
-        "chefe_producao",
-        "producao",
       ],
       items: [],
     },
@@ -133,7 +131,7 @@ export function Layout({
         "administrador",
         "escritorio",
         "projeto",
-        "chefe_producao",
+        "producao",
       ],
       items: [
         {
@@ -152,7 +150,6 @@ export function Layout({
         "administrador",
         "escritorio",
         "projeto",
-        "chefe_producao",
       ],
       items: [
         {
@@ -171,7 +168,7 @@ export function Layout({
         "administrador",
         "escritorio",
         "projeto",
-        "chefe_producao",
+        "producao",
       ],
       items: [],
     },
@@ -239,7 +236,6 @@ export function Layout({
       administrador: "Administrador",
       escritorio: "Escritório",
       projeto: "Projeto",
-      chefe_producao: "Chefe de Produção",
       producao: "Produção",
     };
     return labels[role] || role;
@@ -250,7 +246,6 @@ export function Layout({
       administrador: "#ef4444",
       escritorio: "#3b82f6",
       projeto: "#8b5cf6",
-      chefe_producao: "#f59e0b",
       producao: "#10b981",
     };
     return colors[role] || "#64748b";

@@ -85,8 +85,7 @@ export function SchedulesPage() {
 
   const canManage =
     currentUser?.role === "administrador" ||
-    currentUser?.role === "projeto" ||
-    currentUser?.role === "chefe_producao";
+    currentUser?.role === "projeto";
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hasActiveFilters =

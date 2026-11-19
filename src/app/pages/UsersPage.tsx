@@ -170,14 +170,12 @@ export function UsersPage() {
       administrador: "bg-red-500",
       escritorio: "bg-red-500",
       projeto: "bg-purple-500",
-      chefe_producao: "bg-orange-500",
       producao: "bg-green-500",
     };
     const labels: Record<UserRole, string> = {
       administrador: "Administrador",
       escritorio: "Escritório",
       projeto: "Projeto",
-      chefe_producao: "Chefe de Produção",
       producao: "Produção",
     };
     return (
@@ -321,9 +319,6 @@ export function UsersPage() {
                           </SelectItem>
                           <SelectItem value="projeto">
                             Projeto
-                          </SelectItem>
-                          <SelectItem value="chefe_producao">
-                            Chefe de Produção
                           </SelectItem>
                           <SelectItem value="producao">
                             Produção

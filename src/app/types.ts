@@ -2,7 +2,6 @@ export type UserRole =
    | "administrador"
   | "escritorio"
   | "projeto"
-  | "chefe_producao"
   | "producao";
 
 export interface User {

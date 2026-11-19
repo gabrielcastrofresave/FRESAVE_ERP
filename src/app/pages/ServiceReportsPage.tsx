@@ -432,8 +432,9 @@ export function ServiceReportsPage() {
 
   const canCreate =
     currentUser?.role === "administrador" ||
+    currentUser?.role === "escritorio" ||
     currentUser?.role === "projeto" ||
-    currentUser?.role === "chefe_producao";
+    currentUser?.role === "producao";
   const hasActiveFilters =
     filters.search !== "" ||
     filters.status !== "todos" ||
